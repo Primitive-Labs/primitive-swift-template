@@ -17,7 +17,7 @@ let package = Package(
         .executableTarget(
             name: "PrimitiveAppTemplate",
             dependencies: [
-                .product(name: "PrimitiveApp", package: "PrimitiveApp"),
+                .product(name: "PrimitiveApp", package: "swift-primitive-app"),
             ],
             path: "Sources/PrimitiveAppTemplate"
         ),
