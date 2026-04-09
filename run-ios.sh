@@ -1,12 +1,108 @@
 #!/bin/bash
-# Build and run on iOS Simulator (no Xcode GUI needed)
+# Build and run on iOS Simulator (default) or a connected physical device (--device).
+#
+# Usage:
+#   ./run-ios.sh                build & run on simulator
+#   ./run-ios.sh --device       build & run on first paired iPhone
+#   ./run-ios.sh --verbose      stream all process logs (simulator only)
 set -euo pipefail
 cd "$(dirname "$0")"
 
 PROJECT="PrimitiveAppTemplate.xcodeproj"
 SCHEME="PrimitiveAppTemplate_iOS"
 BUNDLE_ID="com.primitivelabs.PrimitiveAppTemplate"
+APP_NAME="PrimitiveAppTemplate"
 
+USE_DEVICE=false
+VERBOSE=false
+for arg in "$@"; do
+    case "$arg" in
+        --device)  USE_DEVICE=true ;;
+        --verbose) VERBOSE=true ;;
+        *) echo "Unknown argument: $arg"; echo "Usage: $0 [--device] [--verbose]"; exit 1 ;;
+    esac
+done
+
+# ────────────────────────────────────────────────────────────────────────────
+# Physical device path (--device)
+# ────────────────────────────────────────────────────────────────────────────
+if [ "$USE_DEVICE" = true ]; then
+    # devicectl prints a harmless "Failed to load provisioning paramter list"
+    # warning to stderr on every invocation (it's about the unrelated `devicectl
+    # manage create` subcommand). Filter it out so real errors stand out.
+    DEVICECTL_NOISE='(^Failed to load provisioning paramter list|^`devicectl manage create` may support)'
+    filter_devicectl_stderr() { grep -E -v "$DEVICECTL_NOISE" >&2 || true; }
+
+    DEVICES_JSON=$(mktemp -t devicectl.XXXXXX.json)
+    trap 'rm -f "$DEVICES_JSON"' EXIT
+    xcrun devicectl list devices --json-output "$DEVICES_JSON" >/dev/null 2> >(filter_devicectl_stderr) || true
+
+    DEVICE_UDID=$(python3 -c "
+import json
+with open('$DEVICES_JSON') as f:
+    data = json.load(f)
+for d in data.get('result', {}).get('devices', []):
+    hw = d.get('hardwareProperties', {})
+    conn = d.get('connectionProperties', {})
+    if hw.get('platform') == 'iOS' and conn.get('pairingState') == 'paired':
+        print(d.get('identifier', ''))
+        break
+")
+    if [ -z "$DEVICE_UDID" ]; then
+        echo "Error: No paired iPhone found."
+        echo "  Connect your device via USB, trust this Mac, and verify with:"
+        echo "  xcrun devicectl list devices"
+        exit 1
+    fi
+
+    DEVICE_NAME=$(python3 -c "
+import json
+with open('$DEVICES_JSON') as f:
+    data = json.load(f)
+for d in data.get('result', {}).get('devices', []):
+    if d.get('identifier') == '$DEVICE_UDID':
+        print(d.get('deviceProperties', {}).get('name', 'iPhone'))
+        break
+")
+    echo "Using device: $DEVICE_NAME ($DEVICE_UDID)"
+
+    echo "Building for iOS device..."
+    xcodebuild build \
+        -project "$PROJECT" \
+        -scheme "$SCHEME" \
+        -destination "id=$DEVICE_UDID" \
+        -allowProvisioningUpdates \
+        -quiet \
+        2>&1
+
+    BUILD_DIR=$(xcodebuild -project "$PROJECT" -scheme "$SCHEME" -destination "id=$DEVICE_UDID" -showBuildSettings 2>/dev/null | grep " BUILT_PRODUCTS_DIR" | awk '{print $3}')
+    APP_PATH="$BUILD_DIR/${APP_NAME}.app"
+
+    if [ ! -d "$APP_PATH" ]; then
+        echo "Error: Build succeeded but can't find $APP_PATH"
+        exit 1
+    fi
+
+    echo "Installing on $DEVICE_NAME..."
+    xcrun devicectl device install app --device "$DEVICE_UDID" "$APP_PATH" \
+        2> >(filter_devicectl_stderr)
+
+    echo "Launching on $DEVICE_NAME -- streaming console (Ctrl+C to stop)"
+    echo "─────────────────────────────────────────────────────────"
+    # --console attaches stdout/stderr from the launched process (print / NSLog).
+    # For full os_log streaming, open Console.app and select the device.
+    xcrun devicectl device process launch \
+        --console \
+        --terminate-existing \
+        --device "$DEVICE_UDID" \
+        "$BUNDLE_ID" \
+        2> >(filter_devicectl_stderr)
+    exit 0
+fi
+
+# ────────────────────────────────────────────────────────────────────────────
+# Simulator path (default)
+# ────────────────────────────────────────────────────────────────────────────
 # Pick a simulator -- use first booted, or default to latest iPhone
 BOOTED_UDID=$(xcrun simctl list devices booted -j | python3 -c "
 import json, sys
@@ -79,16 +175,16 @@ xcrun simctl launch "$BOOTED_UDID" "$BUNDLE_ID"
 echo "Running on $SIM_NAME -- streaming logs (Ctrl+C to stop)"
 echo "─────────────────────────────────────────────────────────"
 
-if [ "${1:-}" = "--verbose" ]; then
+if [ "$VERBOSE" = true ]; then
     # All logs from the process (includes Apple framework noise)
     xcrun simctl spawn "$BOOTED_UDID" log stream \
-        --predicate "process == \"PrimitiveAppTemplate\"" \
+        --predicate "process == \"$APP_NAME\"" \
         --level debug \
         --style compact
 else
     # Only our app's logs (PrimitiveApp library + NSLog/print output)
     xcrun simctl spawn "$BOOTED_UDID" log stream \
-        --predicate "subsystem BEGINSWITH \"com.primitivelabs\" OR (process == \"PrimitiveAppTemplate\" AND subsystem == \"\")" \
+        --predicate "subsystem BEGINSWITH \"com.primitivelabs\" OR (process == \"$APP_NAME\" AND subsystem == \"\")" \
         --level debug \
         --style compact
 fi
