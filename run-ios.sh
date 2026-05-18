@@ -23,6 +23,16 @@ for arg in "$@"; do
     esac
 done
 
+# Regenerate the xcodeproj from project.yml so that newly added source
+# files get picked up. xcodegen is idempotent + fast; skip silently if not
+# installed (users can still build if their xcodeproj is up to date).
+if command -v xcodegen >/dev/null 2>&1; then
+    xcodegen generate --quiet
+else
+    echo "Warning: xcodegen not installed — xcodeproj may be stale if files were added/removed."
+    echo "  Install with: brew install xcodegen"
+fi
+
 # ────────────────────────────────────────────────────────────────────────────
 # Physical device path (--device)
 # ────────────────────────────────────────────────────────────────────────────

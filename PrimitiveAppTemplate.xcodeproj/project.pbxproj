@@ -23,7 +23,6 @@
 		135CFAE383816AA82D2E7ABC /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		145FA2287630E2F15774810F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		22D4EDF4ABD3438AF6ED5C83 /* primitive.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = primitive.json; sourceTree = "<group>"; };
-		81F503577E735EF924473922 /* swift-primitive-app */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "swift-primitive-app"; path = "../swift-primitive-app"; sourceTree = SOURCE_ROOT; };
 		9814C93D1BCC3782D1267EF2 /* PrimitiveAppTemplate.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PrimitiveAppTemplate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		ADCCB791BA52ED925B364656 /* PrimitiveAppTemplate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PrimitiveAppTemplate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D19C365250FD7348EB25D348 /* PrimitiveAppTemplateApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrimitiveAppTemplateApp.swift; sourceTree = "<group>"; };
@@ -76,20 +75,11 @@
 			path = Sources/PrimitiveAppTemplate;
 			sourceTree = "<group>";
 		};
-		E1DFD2D14FE49DACB59FF7CF /* Packages */ = {
-			isa = PBXGroup;
-			children = (
-				81F503577E735EF924473922 /* swift-primitive-app */,
-			);
-			name = Packages;
-			sourceTree = "<group>";
-		};
 		EBE2810F3D12C26F35B51AF6 = {
 			isa = PBXGroup;
 			children = (
 				145FA2287630E2F15774810F /* Assets.xcassets */,
 				22D4EDF4ABD3438AF6ED5C83 /* primitive.json */,
-				E1DFD2D14FE49DACB59FF7CF /* Packages */,
 				D368A51ECD08658579BAA4A9 /* PrimitiveAppTemplate */,
 				4F5DDDC6D96B87516F7C5823 /* Products */,
 			);
@@ -168,7 +158,7 @@
 			mainGroup = EBE2810F3D12C26F35B51AF6;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				A3A333884C905AA645CAA82F /* XCLocalSwiftPackageReference "../swift-primitive-app" */,
+				A83669E314E56E52F554392A /* XCRemoteSwiftPackageReference "swift-primitive-app" */,
 			);
 			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
@@ -233,6 +223,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 2J4V27W63D;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Info-Partial.plist";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Expose the debug inspector to your Mac browser over Wi-Fi (DEBUG builds only).";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -320,6 +312,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 2J4V27W63D;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Info-Partial.plist";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Expose the debug inspector to your Mac browser over Wi-Fi (DEBUG builds only).";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -345,6 +339,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 2J4V27W63D;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Info-Partial.plist";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Expose the debug inspector to your Mac browser over Wi-Fi (DEBUG builds only).";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -370,6 +366,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 2J4V27W63D;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Info-Partial.plist";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Expose the debug inspector to your Mac browser over Wi-Fi (DEBUG builds only).";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -472,20 +470,26 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		A3A333884C905AA645CAA82F /* XCLocalSwiftPackageReference "../swift-primitive-app" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = "../swift-primitive-app";
+/* Begin XCRemoteSwiftPackageReference section */
+		A83669E314E56E52F554392A /* XCRemoteSwiftPackageReference "swift-primitive-app" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Primitive-Labs/swift-primitive-app.git";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
 		};
-/* End XCLocalSwiftPackageReference section */
+/* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		464D3DC0DB6AA75251C7EE82 /* PrimitiveApp */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = A83669E314E56E52F554392A /* XCRemoteSwiftPackageReference "swift-primitive-app" */;
 			productName = PrimitiveApp;
 		};
 		5AAE347B65A53FD3AEE43847 /* PrimitiveApp */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = A83669E314E56E52F554392A /* XCRemoteSwiftPackageReference "swift-primitive-app" */;
 			productName = PrimitiveApp;
 		};
 /* End XCSwiftPackageProductDependency section */

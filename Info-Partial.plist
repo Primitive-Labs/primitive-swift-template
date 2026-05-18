@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  DebugInspector advertises its HTTP server over Bonjour so iOS prompts for the
+	  Local Network permission on first launch. Without this key in Info.plist the
+	  prompt never appears and iOS silently drops LAN traffic to/from the app.
+	  The rest of Info.plist is auto-generated from INFOPLIST_KEY_* build settings;
+	  Xcode merges that generated content onto this base file.
+	-->
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_primitive-inspector._tcp</string>
+	</array>
+</dict>
+</plist>

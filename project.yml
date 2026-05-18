@@ -6,7 +6,8 @@ options:
     macOS: "14.0"
 packages:
   PrimitiveApp:
-    path: ../swift-primitive-app
+    url: https://github.com/Primitive-Labs/swift-primitive-app.git
+    branch: main
 targets:
   PrimitiveAppTemplate:
     type: application
@@ -19,6 +20,12 @@ targets:
         buildPhase: resources
     entitlements:
       path: PrimitiveAppTemplate.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        # network.server lets sandboxed macOS builds bind the DebugInspector's NWListener.
+        # Harmless in release (release excludes DebugInspector entirely via #if DEBUG).
+        com.apple.security.network.server: true
     dependencies:
       - package: PrimitiveApp
         product: PrimitiveApp
@@ -29,6 +36,14 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        # Debug-only: PrimitiveApp's DebugInspector advertises an HTTP server over Bonjour
+        # so a dev's Mac browser can hit the app's debug UI over Wi-Fi. iOS gates all local
+        # network traffic behind a one-time permission prompt; the Info.plist keys below make
+        # the prompt appear on first launch. Harmless in release — the listener itself only
+        # runs in DEBUG. NSBonjourServices is array-valued and Xcode's auto-generator ignores
+        # it, so it lives in Info-Partial.plist; Xcode merges that with the generated keys.
+        INFOPLIST_FILE: Info-Partial.plist
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Expose the debug inspector to your Mac browser over Wi-Fi (DEBUG builds only)."
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5.0"
