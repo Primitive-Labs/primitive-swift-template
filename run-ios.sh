@@ -10,8 +10,20 @@ cd "$(dirname "$0")"
 
 PROJECT="PrimitiveAppTemplate.xcodeproj"
 SCHEME="PrimitiveAppTemplate_iOS"
-BUNDLE_ID="com.primitivelabs.PrimitiveAppTemplate"
 APP_NAME="PrimitiveAppTemplate"
+# Bundle ID is read from project.yml (xcodegen source of truth) so the
+# CLI's per-user slugging (`primitive init --platform apple`) flows
+# through without needing to edit this script too. Fallback only kicks in
+# if project.yml is missing or unparseable.
+read_yml_value() {
+    local key="$1"
+    awk -v k="$key" 'BEGIN{FS=":"} $1 ~ "^[[:space:]]*"k"[[:space:]]*$" {
+        sub(/^[[:space:]]+/, "", $2); sub(/[[:space:]]+$/, "", $2);
+        gsub(/^"|"$/, "", $2); print $2; exit
+    }' project.yml 2>/dev/null
+}
+BUNDLE_ID="$(read_yml_value PRODUCT_BUNDLE_IDENTIFIER)"
+BUNDLE_ID="${BUNDLE_ID:-com.primitivelabs.PrimitiveAppTemplate}"
 
 USE_DEVICE=false
 VERBOSE=false
