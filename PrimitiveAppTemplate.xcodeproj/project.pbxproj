@@ -138,11 +138,11 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					A501025784DAB44F7567707D = {
-						DevelopmentTeam = 2J4V27W63D;
+						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
 					B8AA50FF09BA6737A3F2ADF8 = {
-						DevelopmentTeam = 2J4V27W63D;
+						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -221,7 +221,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 2J4V27W63D;
+				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Info-Partial.plist";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Expose the debug inspector to your Mac browser over Wi-Fi (DEBUG builds only).";
@@ -310,7 +310,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 2J4V27W63D;
+				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Info-Partial.plist";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Expose the debug inspector to your Mac browser over Wi-Fi (DEBUG builds only).";
@@ -337,7 +337,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 2J4V27W63D;
+				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Info-Partial.plist";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Expose the debug inspector to your Mac browser over Wi-Fi (DEBUG builds only).";
@@ -364,7 +364,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 2J4V27W63D;
+				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Info-Partial.plist";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Expose the debug inspector to your Mac browser over Wi-Fi (DEBUG builds only).";

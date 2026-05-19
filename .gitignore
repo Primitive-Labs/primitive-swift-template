@@ -17,3 +17,10 @@ Package.resolved
 # Auth credentials
 .credentials.json
 credentials.json
+
+# Fastlane / App Store Connect — never commit credentials
+fastlane/.env
+fastlane/api_key.p8
+fastlane/report.xml
+fastlane/test_output/
+fastlane/README.md

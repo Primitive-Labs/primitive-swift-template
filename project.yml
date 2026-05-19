@@ -48,10 +48,12 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5.0"
         # Signing -- set DEVELOPMENT_TEAM to your Apple Team ID to enable
-        # code signing. Leave empty for unsigned dev builds.
+        # code signing. Empty value works for the iOS Simulator (unsigned dev
+        # builds) but cannot be deployed to a real device or TestFlight.
+        # To set it later: `primitive apple set-team-id <YOUR_TEAM_ID>`
         # Find your Team ID: https://developer.apple.com/account -> Membership Details
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: "2J4V27W63D"
+        DEVELOPMENT_TEAM: ""
     scheme:
       testTargets: []
       gatherCoverageData: false

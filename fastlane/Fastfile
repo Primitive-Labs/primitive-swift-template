@@ -1,0 +1,330 @@
+default_platform(:ios)
+
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
+
+# Read a build setting (PRODUCT_BUNDLE_IDENTIFIER, DEVELOPMENT_TEAM,
+# MARKETING_VERSION, etc.) from project.yml. xcodegen is the source of truth
+# for this scaffolded app; the Xcode project is regenerated from it.
+def project_yml_value(key)
+  yml = File.read("../project.yml")
+  match = yml.match(/#{Regexp.escape(key)}:\s*"?([^"\n]+)"?/)
+  match && match.captures.first
+end
+
+def project_yml_name
+  yml = File.read("../project.yml")
+  yml.match(/^name:\s*(\S+)/)&.captures&.first || "PrimitiveAppTemplate"
+end
+
+ASC_KEY_GUIDE = <<~MSG
+  App Store Connect API key is required for TestFlight / App Store uploads.
+
+  To create one:
+    1. Open https://appstoreconnect.apple.com/access/integrations/api
+    2. Click "Generate API Key" (or "+"). Role: Admin or App Manager.
+    3. Note the Key ID and Issuer ID shown on the page.
+    4. Download the .p8 file — one-time download.
+    5. Save the .p8 to fastlane/api_key.p8 (relative to this directory).
+    6. Copy fastlane/.env.example to fastlane/.env and fill in:
+         ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_PATH
+
+  After that, re-run the fastlane lane that brought you here.
+MSG
+
+def load_api_key
+  key_id = ENV["ASC_KEY_ID"]
+  issuer_id = ENV["ASC_ISSUER_ID"]
+  key_path = ENV["ASC_KEY_PATH"] || "./fastlane/api_key.p8"
+
+  missing = []
+  missing << "ASC_KEY_ID" if key_id.nil? || key_id.empty? || key_id == "YOUR_KEY_ID"
+  missing << "ASC_ISSUER_ID" if issuer_id.nil? || issuer_id.empty? || issuer_id == "YOUR_ISSUER_ID"
+  missing << "#{key_path} (key file)" unless File.exist?(File.expand_path(key_path))
+
+  unless missing.empty?
+    UI.error("Missing App Store Connect credentials: #{missing.join(', ')}")
+    UI.message("")
+    ASC_KEY_GUIDE.each_line { |line| UI.message(line.chomp) }
+    UI.user_error!("Set up App Store Connect API key, then re-run.")
+  end
+
+  app_store_connect_api_key(
+    key_id: key_id,
+    issuer_id: issuer_id,
+    key_filepath: key_path,
+    in_house: false
+  )
+end
+
+def require_team_id
+  team_id = project_yml_value("DEVELOPMENT_TEAM")
+  if team_id.nil? || team_id.empty?
+    UI.user_error!(
+      "DEVELOPMENT_TEAM is empty in project.yml. " \
+      "Run `primitive apple set-team-id <YOUR_TEAM_ID>` to enable signing. " \
+      "Find your Team ID at https://developer.apple.com/account -> Membership."
+    )
+  end
+  team_id
+end
+
+def current_version
+  version = project_yml_value("MARKETING_VERSION") || "1.0"
+  build = project_yml_value("CURRENT_PROJECT_VERSION") || "1"
+  { version: version, build: build.to_i }
+end
+
+# ---------------------------------------------------------------------------
+# iOS lanes
+# ---------------------------------------------------------------------------
+
+platform :ios do
+  desc "Build and upload iOS app to TestFlight"
+  lane :beta do
+    require_team_id
+    api_key = load_api_key
+    name = project_yml_name
+
+    build_app(
+      project: "#{name}.xcodeproj",
+      scheme: "#{name}_iOS",
+      destination: "generic/platform=iOS",
+      export_method: "app-store",
+      export_options: { signingStyle: "automatic" },
+      xcargs: "-allowProvisioningUpdates",
+      output_directory: ".build/archives",
+      output_name: "#{name}-iOS.ipa",
+      clean: true,
+    )
+
+    upload_to_testflight(
+      api_key: api_key,
+      skip_waiting_for_build_processing: true,
+      skip_submission: true,
+    )
+
+    UI.success("iOS build uploaded to TestFlight!")
+    UI.message("It will appear in TestFlight after processing (5-30 min)")
+  end
+
+  desc "Build and submit iOS app to App Store review"
+  lane :release do
+    require_team_id
+    api_key = load_api_key
+    name = project_yml_name
+
+    build_app(
+      project: "#{name}.xcodeproj",
+      scheme: "#{name}_iOS",
+      destination: "generic/platform=iOS",
+      export_method: "app-store",
+      export_options: { signingStyle: "automatic" },
+      xcargs: "-allowProvisioningUpdates",
+      output_directory: ".build/archives",
+      output_name: "#{name}-iOS.ipa",
+      clean: true,
+    )
+
+    upload_to_app_store(
+      api_key: api_key,
+      skip_metadata: true,
+      skip_screenshots: true,
+      precheck_include_in_app_purchases: false,
+    )
+
+    UI.success("iOS build uploaded to App Store Connect!")
+    UI.message("Go to App Store Connect to prepare metadata and submit for review")
+  end
+end
+
+# ---------------------------------------------------------------------------
+# macOS lanes
+# ---------------------------------------------------------------------------
+
+platform :mac do
+  desc "Build and upload macOS app to TestFlight"
+  lane :beta do
+    require_team_id
+    api_key = load_api_key
+    name = project_yml_name
+
+    build_app(
+      project: "#{name}.xcodeproj",
+      scheme: "#{name}_macOS",
+      destination: "generic/platform=macOS",
+      export_method: "app-store",
+      export_options: { signingStyle: "automatic" },
+      xcargs: "-allowProvisioningUpdates ARCHS=arm64",
+      output_directory: ".build/archives",
+      output_name: "#{name}-macOS.pkg",
+      clean: true,
+    )
+
+    upload_to_testflight(
+      api_key: api_key,
+      skip_waiting_for_build_processing: true,
+      skip_submission: true,
+    )
+
+    UI.success("macOS build uploaded to TestFlight!")
+  end
+
+  desc "Build notarized DMG for direct distribution"
+  lane :dmg do
+    require_team_id
+    name = project_yml_name
+    v = current_version
+
+    dmg_path = "../.build/archives/#{name}-#{v[:version]}.dmg"
+    archive_path = "../.build/archives/#{name}-macOS.xcarchive"
+    export_path = "../.build/archives/dmg-export"
+
+    UI.message("Archiving...")
+    sh(
+      "xcodebuild archive " \
+      "-project ../#{name}.xcodeproj " \
+      "-scheme #{name}_macOS " \
+      "-destination 'generic/platform=macOS' " \
+      "-archivePath '#{archive_path}' " \
+      "-allowProvisioningUpdates " \
+      "ARCHS=arm64 " \
+      "ENABLE_HARDENED_RUNTIME=YES " \
+      "-quiet"
+    )
+    UI.success("Archive created")
+
+    UI.message("Exporting with Developer ID...")
+    export_plist = "../.build/archives/ExportOptions-dmg.plist"
+    File.write(export_plist, <<~PLIST)
+      <?xml version="1.0" encoding="UTF-8"?>
+      <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+      <plist version="1.0">
+      <dict>
+          <key>method</key>
+          <string>developer-id</string>
+          <key>signingStyle</key>
+          <string>automatic</string>
+      </dict>
+      </plist>
+    PLIST
+
+    sh(
+      "xcodebuild -exportArchive " \
+      "-archivePath '#{archive_path}' " \
+      "-exportOptionsPlist '#{export_plist}' " \
+      "-exportPath '#{export_path}' " \
+      "-allowProvisioningUpdates " \
+      "-quiet"
+    )
+    UI.success("Exported with Developer ID signing")
+
+    app_path = "#{export_path}/#{name}.app"
+
+    UI.message("Creating DMG...")
+    sh("rm -f '#{dmg_path}'")
+    sh(
+      "hdiutil create -volname '#{name}' " \
+      "-srcfolder '#{app_path}' " \
+      "-ov -format UDZO " \
+      "'#{dmg_path}' -quiet"
+    )
+    UI.success("DMG created")
+
+    UI.message("Submitting for notarization...")
+    begin
+      sh("xcrun notarytool submit '#{dmg_path}' --keychain-profile 'primitive-notarytool' --wait")
+    rescue
+      UI.error("Notarization failed — keychain profile 'primitive-notarytool' may not be set up.")
+      UI.message("")
+      UI.message("To set it up, run:")
+      UI.message("  xcrun notarytool store-credentials 'primitive-notarytool' \\")
+      UI.message("    --apple-id 'your@email.com' \\")
+      UI.message("    --team-id '#{project_yml_value('DEVELOPMENT_TEAM')}'")
+      UI.message("")
+      UI.message("Generate an app-specific password at:")
+      UI.message("  https://account.apple.com (Sign-In and Security -> App-Specific Passwords)")
+      raise
+    end
+    UI.success("Notarization complete")
+
+    # Apple CDN can take a few minutes to propagate notarization status.
+    5.times do |i|
+      begin
+        sh("xcrun stapler staple '#{dmg_path}'")
+        break
+      rescue
+        raise if i == 4
+        UI.message("Staple attempt #{i + 1} failed, waiting 30s for CDN propagation...")
+        sleep(30)
+      end
+    end
+    UI.success("DMG notarized and stapled: .build/archives/#{name}-#{v[:version]}.dmg")
+  end
+end
+
+# ---------------------------------------------------------------------------
+# Utility lanes (platform-independent)
+# ---------------------------------------------------------------------------
+
+desc "Bump version number (type: major, minor, patch)"
+lane :bump do |options|
+  type = (options[:type] || "patch").to_s
+  v = current_version
+
+  parts = v[:version].split(".").map(&:to_i)
+  parts.push(0) while parts.length < 3
+
+  case type
+  when "major"
+    parts[0] += 1; parts[1] = 0; parts[2] = 0
+  when "minor"
+    parts[1] += 1; parts[2] = 0
+  when "patch"
+    parts[2] += 1
+  end
+
+  new_version = parts.join(".")
+  new_build = v[:build] + 1
+
+  yml = File.read("../project.yml")
+  yml.gsub!(/MARKETING_VERSION:\s*"?[^"\n]+"?/, "MARKETING_VERSION: \"#{new_version}\"")
+  yml.gsub!(/CURRENT_PROJECT_VERSION:\s*"?[^"\n]+"?/, "CURRENT_PROJECT_VERSION: \"#{new_build}\"")
+  File.write("../project.yml", yml)
+
+  sh("xcodegen generate --quiet 2>/dev/null || xcodegen generate")
+
+  UI.success("Version bumped: #{v[:version]} (#{v[:build]}) → #{new_version} (#{new_build})")
+end
+
+desc "Show current distribution status"
+lane :status do
+  name = project_yml_name
+  v = current_version
+  team_id = project_yml_value("DEVELOPMENT_TEAM")
+  bundle_id = project_yml_value("PRODUCT_BUNDLE_IDENTIFIER")
+
+  UI.message("App: #{name}")
+  UI.message("Version: #{v[:version]} (#{v[:build]})")
+  UI.message("Bundle ID: #{bundle_id}")
+  if team_id.nil? || team_id.empty?
+    UI.important("Team ID: (unset — simulator only; run `primitive apple set-team-id <id>`)")
+  else
+    UI.message("Team ID: #{team_id}")
+  end
+
+  UI.message("")
+  UI.message("Certificates:")
+  sh("security find-identity -v -p codesigning | grep -E '(Developer ID|Apple Distribution|Apple Development)' || true")
+
+  UI.message("")
+  if File.exist?("fastlane/api_key.p8") || (ENV["ASC_KEY_PATH"] && File.exist?(ENV["ASC_KEY_PATH"]))
+    UI.success("App Store Connect API key: configured")
+  else
+    UI.important("App Store Connect API key: not configured")
+    UI.message("  Required for TestFlight/App Store upload.")
+    UI.message("  Generate at: https://appstoreconnect.apple.com/access/integrations/api")
+    UI.message("  Then save the .p8 to fastlane/api_key.p8 and copy fastlane/.env.example to fastlane/.env.")
+  end
+end

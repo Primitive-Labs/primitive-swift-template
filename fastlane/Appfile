@@ -1,0 +1,12 @@
+# app_identifier and team_id are both pulled from project.yml at runtime
+# so this file stays generic across scaffolded apps. Update project.yml
+# (or run `primitive apple set-team-id <id>`) instead of editing here.
+
+def read_project_yml(key)
+  yml = File.read(File.expand_path("../project.yml", __dir__))
+  match = yml.match(/#{Regexp.escape(key)}:\s*"?([^"\n]+)"?/)
+  match && match.captures.first
+end
+
+app_identifier read_project_yml("PRODUCT_BUNDLE_IDENTIFIER")
+team_id read_project_yml("DEVELOPMENT_TEAM")
