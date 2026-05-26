@@ -116,23 +116,49 @@ This is the main thing. `HomeView` is a placeholder; rip it out and put your app
 - `appState.userName` / `userEmail` / `userAvatarUrl`
 - `appState.isConnected`, `appState.isSynced`
 
-### Add typed BaoModels (TaskRecord, etc.)
+### Add typed records (Y.Map CRDT models)
 
-The base `PrimitiveAppState` doesn't know about your record types. Subclass it:
+The base `PrimitiveAppState` doesn't know about your record types. The canonical flow is **`schema.toml` → codegen-emitted struct → wrapped in `TypedModel<T>`**.
+
+**1. Author a `schema.toml`** in your target's source tree:
+
+```toml
+# Sources/PrimitiveAppTemplate/Models/schema.toml
+[models.todos]
+[models.todos.codegen]
+swift_name = "TodoRecord"
+
+[models.todos.fields.id]
+type = "id"
+
+[models.todos.fields.text]
+type = "string"
+required = true
+
+[models.todos.fields.completed]
+type = "boolean"
+required = true
+```
+
+At build time the `JsBaoCodegenPlugin` SwiftPM plugin emits a `PrimitiveModel`-conforming `TodoRecord` struct — you don't hand-write the boilerplate. See [Swift model codegen](../../../js-bao-wss-swift/swift-client/docs/codegen.md) and [TypedModel authoring](../../../js-bao-wss-swift/swift-client/docs/baomodels.md) for the full schema vocabulary.
+
+**2. Subclass `PrimitiveAppState`** to attach the typed model:
 
 ```swift
 @MainActor
 final class MyAppState: PrimitiveAppState {
-    @Published var taskModel: BaoModel<TaskRecord>?
+    @Published var todoModel: TypedModel<TodoRecord>?
 
     override func onDocumentOpened(documentId: String) {
         guard let client, let doc = client.getDoc(documentId) else { return }
-        taskModel = BaoModel<TaskRecord>(doc: doc, client: client, documentId: documentId)
+        todoModel = makeTypedModel(doc: doc, documentId: documentId)
     }
 }
 ```
 
-Then update the `@main` to use your subclass and inject it twice (once as the base, once as the subclass — see [PrimitiveApp library docs §"Inject the subclass twice"](../../swift-primitive-app/docs/README.md#patterns-that-show-up-everywhere)):
+Prefer `makeTypedModel(doc:documentId:)` over constructing `TypedModel<T>(doc:)` directly — the helper also registers the model with the debug inspector.
+
+**3. Update `@main`** to use the subclass, and inject it twice — once as the base, once as the subclass — so library views (`AuthGateView`, etc.) resolve `PrimitiveAppState` and your views resolve `MyAppState`. See [PrimitiveApp library docs §"Inject the subclass twice"](../../swift-primitive-app/docs/README.md#patterns-that-show-up-everywhere):
 
 ```swift
 @StateObject private var appState = MyAppState()
@@ -144,7 +170,16 @@ WindowGroup {
 }
 ```
 
-The [demo app](../../primitive-app-demo) is exactly this pattern at scale — it has 4 `BaoModel` types and a sidebar of feature pages. Borrow as much from it as you want.
+> **Heads-up: the template doesn't yet ship with codegen plumbing.** Adding your first typed model requires:
+> - A direct `JsBaoClient` dependency in [`Package.swift`](../Package.swift) (it's currently transitive via `PrimitiveApp`, which doesn't satisfy the plugin's `.plugin(...package:)` reference).
+> - A `.plugin(name: "JsBaoCodegenPlugin", package: "JsBaoClient")` attachment on the target.
+> - For the Xcode build path, a Run Script phase that writes generated files into `Sources/.../Models/Generated/` plus an `exclude: ["Models/Generated"]` on the SPM target — the [dual-path pattern](../../../js-bao-wss-swift/swift-client/docs/codegen.md#c-ios-apps-with-xcodegen--spm-dependency--the-dual-path-pattern), needed because SwiftPM build-tool plugins don't fire under `xcodebuild`.
+>
+> Copy the working setup from the demo's [`Package.swift`](../../primitive-app-demo/Package.swift) and [`Sources/PrimitiveAppDemo/Models/schema.toml`](../../primitive-app-demo/Sources/PrimitiveAppDemo/Models/schema.toml) when you add your first model.
+
+The [demo app](../../primitive-app-demo) uses this pattern at scale across multiple `TypedModel` types and a sidebar of feature pages. Borrow as much from it as you want.
+
+> **Legacy `BaoModel<T>`?** Older apps used a separate `BaoModel<T>` class with a different constructor (`BaoModel<T>(doc:client:documentId:)`). It still works, but new code should use `TypedModel<T>` — see the [note in swift-primitive-app docs](../../swift-primitive-app/docs/README.md#1-primitiveappstate--owns-everything).
 
 ### Use a different `primitive.json`
 
