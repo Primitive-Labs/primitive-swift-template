@@ -1,0 +1,47 @@
+# Schema for `swift-bao-codegen` — the build-time codegen tool that
+# emits one `<class_name>.swift` file per `[models.<name>]` block into
+# `Models/Generated/`. `swift build` runs the codegen automatically via
+# the SwiftPM `JsBaoCodegenPlugin`; the Xcode/iOS path runs it manually
+# from `run-ios.sh`.
+#
+# The same TOML is loadable by `js-bao`'s `loadSchemaFromTomlString` so
+# any web/Node client speaking the same Primitive doc can read/write the
+# same wire shape.
+#
+# ----------------------------------------------------------------------
+# This file ships as a starting template — no active models. Define your
+# own model below to give your app data. The example block at the bottom
+# shows the full shape: id field, typed scalars, the `required`
+# constraint (necessary for CRDT-backed fields since the CRDT layer
+# can't store nil), and the class-name override.
+#
+# After editing, on the SwiftPM path: `swift build` regenerates.
+# On the Xcode path: `./run-ios.sh` runs codegen then regens xcodeproj.
+# ----------------------------------------------------------------------
+
+# Example — copy, uncomment, and adapt. Snake_case field names are
+# preserved on the wire; if call sites read awkwardly, add camelCase
+# aliases in a hand-written `<Type>+Extensions.swift` companion file
+# under `Models/` (NOT inside `Generated/` — the codegen sweep wipes
+# that directory).
+#
+# [models.items]
+# class_name = "ItemRecord"
+#
+# [models.items.fields.id]
+# type = "id"
+#
+# [models.items.fields.text]
+# type = "string"
+# required = true
+#
+# [models.items.fields.completed]
+# type = "boolean"
+# required = true
+#
+# [models.items.fields.createdAt]
+# type = "date"
+# required = true
+# # Required because CRDT-backed fields can't store null. If a field is
+# # genuinely optional, use `""` / `0` / a sentinel timestamp at the
+# # call site instead of `nil`. See Critical Rule #5 in the agent guide.

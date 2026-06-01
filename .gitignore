@@ -8,6 +8,12 @@ build/
 .swiftpm/
 Package.resolved
 
+# Codegen output — `swift-bao-codegen` regenerates these from
+# `schema.toml` via the SPM plugin and via `run-ios.sh`. Ignore the
+# emitted .swift files but track the directory itself (via its README)
+# so a fresh clone has the path Package.swift's `exclude:` references.
+Sources/PrimitiveAppTemplate/Models/Generated/*.swift
+
 # macOS
 .DS_Store
 

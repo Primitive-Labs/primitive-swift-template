@@ -12,6 +12,11 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/Primitive-Labs/swift-primitive-app.git", branch: "main"),
+        // Direct `JsBaoClient` dep so the build-tool plugin reference
+        // below resolves. The same package is pulled in transitively
+        // through `PrimitiveApp`, but SPM plugin references must name a
+        // package the consuming manifest depends on directly.
+        .package(url: "https://github.com/Primitive-Labs/swift-client.git", branch: "main"),
     ],
     targets: [
         .executableTarget(
@@ -19,7 +24,17 @@ let package = Package(
             dependencies: [
                 .product(name: "PrimitiveApp", package: "swift-primitive-app"),
             ],
-            path: "Sources/PrimitiveAppTemplate"
+            path: "Sources/PrimitiveAppTemplate",
+            // The Xcode build path (`run-ios.sh`) runs `swift-bao-codegen`
+            // by hand and writes into `Models/Generated/` so xcodegen
+            // can scan it into the .pbxproj. The SPM plugin emits its
+            // own copies into the plugin work dir on `swift build`.
+            // Exclude the manual-output dir from SPM's view so the two
+            // producers don't collide.
+            exclude: ["Models/Generated"],
+            plugins: [
+                .plugin(name: "JsBaoCodegenPlugin", package: "swift-client"),
+            ]
         ),
     ]
 )

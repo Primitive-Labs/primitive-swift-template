@@ -27,17 +27,46 @@ BUNDLE_ID="${BUNDLE_ID:-com.primitivelabs.PrimitiveAppTemplate}"
 
 USE_DEVICE=false
 VERBOSE=false
-for arg in "$@"; do
-    case "$arg" in
-        --device)  USE_DEVICE=true ;;
-        --verbose) VERBOSE=true ;;
-        *) echo "Unknown argument: $arg"; echo "Usage: $0 [--device] [--verbose]"; exit 1 ;;
+SIM_TARGET=""
+# Args: --device, --verbose, --sim <name-or-udid>. We hand-roll the
+# parser (no getopt on macOS by default) so a positional value can
+# follow `--sim` without the user quoting it.
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --device)  USE_DEVICE=true; shift ;;
+        --verbose) VERBOSE=true; shift ;;
+        --sim)
+            if [ -z "${2:-}" ]; then
+                echo "--sim requires a simulator name or UDID, e.g. --sim \"iPhone 15\"" >&2
+                exit 1
+            fi
+            SIM_TARGET="$2"; shift 2 ;;
+        --sim=*)
+            SIM_TARGET="${1#--sim=}"; shift ;;
+        *) echo "Unknown argument: $1"; echo "Usage: $0 [--device] [--verbose] [--sim <name-or-udid>]"; exit 1 ;;
     esac
 done
 
+# ────────────────────────────────────────────────────────────────────────────
+# Model codegen (Xcode build path)
+# ────────────────────────────────────────────────────────────────────────────
+# `swift build` runs `JsBaoCodegenPlugin` automatically. The Xcode app
+# target compiles its own source list from `.pbxproj` though, so the
+# SPM plugin never fires on the iOS path — run the codegen tool by hand
+# here, writing into a checked-out `Generated/` directory that xcodegen
+# picks up below.
+GEN_DIR="Sources/PrimitiveAppTemplate/Models/Generated"
+SCHEMA_TOML="Sources/PrimitiveAppTemplate/Models/schema.toml"
+mkdir -p "$GEN_DIR"
+echo "Running swift-bao-codegen..."
+swift run --package-path . swift-bao-codegen \
+    --input  "$SCHEMA_TOML" \
+    --output "$GEN_DIR"
+
 # Regenerate the xcodeproj from project.yml so that newly added source
-# files get picked up. xcodegen is idempotent + fast; skip silently if not
-# installed (users can still build if their xcodeproj is up to date).
+# files (including freshly-codegen'd `Generated/*.swift`) get picked up.
+# xcodegen is idempotent + fast; skip silently if not installed (users
+# can still build if their xcodeproj is up to date).
 if command -v xcodegen >/dev/null 2>&1; then
     xcodegen generate --quiet
 else
@@ -125,8 +154,50 @@ fi
 # ────────────────────────────────────────────────────────────────────────────
 # Simulator path (default)
 # ────────────────────────────────────────────────────────────────────────────
-# Pick a simulator -- use first booted, or default to latest iPhone
-BOOTED_UDID=$(xcrun simctl list devices booted -j | python3 -c "
+# Pick a simulator. Order of preference:
+#   1. --sim <name-or-udid>  (explicit)
+#   2. first booted simulator
+#   3. latest iPhone available
+# Names match case-insensitively; UDIDs match exactly. If `--sim` is
+# given and matches a simulator that isn't booted yet, boot it.
+BOOTED_UDID=""
+
+if [ -n "$SIM_TARGET" ]; then
+    BOOTED_UDID=$(SIM_TARGET="$SIM_TARGET" xcrun simctl list devices available -j | SIM_TARGET="$SIM_TARGET" python3 -c "
+import json, os, sys
+target = os.environ.get('SIM_TARGET', '').strip()
+target_lower = target.lower()
+data = json.load(sys.stdin)
+for runtime, devices in data.get('devices', {}).items():
+    for d in devices:
+        if not d.get('isAvailable', False): continue
+        if d.get('udid') == target or d.get('name', '').lower() == target_lower:
+            print(d['udid'])
+            sys.exit(0)
+" 2>/dev/null || true)
+    if [ -z "$BOOTED_UDID" ]; then
+        echo "Error: --sim '$SIM_TARGET' did not match any available simulator." >&2
+        echo "  Available simulators: xcrun simctl list devices available" >&2
+        exit 1
+    fi
+    # Boot it if it isn't already.
+    STATE=$(xcrun simctl list devices -j | BOOTED_UDID="$BOOTED_UDID" python3 -c "
+import json, os, sys
+needle = os.environ['BOOTED_UDID']
+data = json.load(sys.stdin)
+for devices in data.get('devices', {}).values():
+    for d in devices:
+        if d.get('udid') == needle:
+            print(d.get('state', ''))
+            sys.exit(0)
+")
+    if [ "$STATE" != "Booted" ]; then
+        echo "Booting requested simulator..."
+        xcrun simctl boot "$BOOTED_UDID"
+        open -a Simulator
+    fi
+else
+    BOOTED_UDID=$(xcrun simctl list devices booted -j | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 for runtime, devices in data.get('devices', {}).items():
@@ -135,6 +206,7 @@ for runtime, devices in data.get('devices', {}).items():
             print(d['udid'])
             sys.exit(0)
 " 2>/dev/null || true)
+fi
 
 if [ -z "$BOOTED_UDID" ]; then
     echo "No simulator booted. Starting one..."
