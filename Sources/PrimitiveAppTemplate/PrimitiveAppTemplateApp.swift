@@ -8,7 +8,7 @@ import AppKit
 @main
 struct PrimitiveAppTemplateApp: App {
     // `TemplateAppState` is a subclass of `PrimitiveAppState` that
-    // adds the per-user singleton-doc setup and TypedModel binding.
+    // adds the per-user singleton-doc setup and model loading.
     // See TemplateAppState.swift. Replace with your own subclass when
     // you customize the data model.
     @StateObject private var appState = TemplateAppState()

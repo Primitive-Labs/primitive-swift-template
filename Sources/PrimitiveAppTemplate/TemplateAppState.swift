@@ -4,9 +4,10 @@ import PrimitiveApp
 import JsBaoClient
 
 /// App-specific state. Subclasses `PrimitiveAppState` to extend the
-/// post-connect flow with a per-user singleton document. Bind your
-/// `TypedModel<T>` instances inside `onDocumentOpened(doc:documentId:)`
-/// once you've defined a model in `Models/schema.toml`.
+/// post-connect flow with a per-user singleton document. Read/write your
+/// models through the codegen'd facade (`ItemRecord.query()`,
+/// `record.save(in: documentId)`) once you've defined a model in
+/// `Models/schema.toml`.
 ///
 /// This template demonstrates the **canonical** Primitive shape for a
 /// "one document per user" app:
@@ -16,9 +17,11 @@ import JsBaoClient
 /// 2. Open that doc through the base class's `selectDocumentAwaiting`
 ///    so sync/remoteUpdate event routing and the debug inspector stay
 ///    consistent.
-/// 3. Bind your `TypedModel<T>` instances inside the
-///    `onDocumentOpened(doc:documentId:)` hook — you get the live
-///    `YDocument` handle, no re-open needed.
+/// 3. Read your models with the cross-document facade
+///    (`ItemRecord.query()` / `ItemRecord.findAll()`) and write with
+///    `try ItemRecord(...).save(in: documentId)`. The codegen facade is
+///    backed by the default client (`JsBaoClient.configureDefault`),
+///    which the base class wires for you — no per-doc model binding.
 ///
 /// Replace the `app_root` alias key with something descriptive of your
 /// app's per-user state shape.
@@ -26,13 +29,13 @@ import JsBaoClient
 final class TemplateAppState: PrimitiveAppState {
 
     // ----------------------------------------------------------------
-    // Define your TypedModel<T> bindings here once you've added models
-    // to `Models/schema.toml` and codegen has emitted the types. The
-    // shape below is the canonical one — un-comment and adapt.
+    // Hold your loaded model rows here once you've added models to
+    // `Models/schema.toml` and codegen has emitted the types. Load them
+    // from the facade in `onDocumentOpened` (override defined below) and
+    // refresh via a `BaoDataLoader` with `.onModel(subscribe:)`.
     //
-    //   @Published private(set) var items: TypedModel<ItemRecord>?
+    //   @Published private(set) var items: [ItemRecord] = []
     //
-    // Then bind in `onDocumentOpened` (override defined below).
     // ----------------------------------------------------------------
 
     // MARK: - Error channels
@@ -123,24 +126,24 @@ final class TemplateAppState: PrimitiveAppState {
         }
     }
 
-    /// Called by the base class once the singleton doc is open. The
-    /// `YDocument` handle comes through so you can immediately bind
-    /// `TypedModel<T>` instances without re-opening the doc.
-    ///
-    /// Prefer `makeTypedModel(doc:documentId:)` over direct
-    /// `TypedModel<T>(doc:)` construction — it ALSO registers the
-    /// model with the in-app debug inspector tab.
+    /// Called by the base class once the singleton doc is open. The doc is
+    /// now connected to the client's shared model store, so the codegen
+    /// facade can read it immediately — no per-doc model binding, and the
+    /// debug inspector picks the model up automatically.
     ///
     /// Example, after adding an `ItemRecord` model to schema.toml:
     ///
     ///   public override func onDocumentOpened(doc: YDocument, documentId: String) async {
-    ///       items = makeTypedModel(doc: doc, documentId: documentId)
+    ///       items = ItemRecord.query()   // cross-doc; or scope with
+    ///                                    // QueryOptions(documents: [documentId])
     ///   }
+    ///
+    /// Write records with `try ItemRecord(...).save(in: documentId)`.
     public override func onDocumentOpened(
         doc: YDocument,
         documentId: String
     ) async {
-        // Bind your TypedModel<T> instances here once you've defined
+        // Load your models from the facade here once you've defined
         // models in schema.toml. See the example in the docstring above.
     }
 }
