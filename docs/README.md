@@ -118,7 +118,7 @@ This is the main thing. `HomeView` is a placeholder; rip it out and put your app
 
 ### Add typed records (Y.Map CRDT models)
 
-The base `PrimitiveAppState` doesn't know about your record types. The canonical flow is **`schema.toml` → codegen-emitted struct → wrapped in `TypedModel<T>`**.
+The base `PrimitiveAppState` doesn't know about your record types. The canonical flow is **`schema.toml` → codegen-emitted struct → registered with the client → read/written through the static `Model.query()` / `save(in:)` facade**.
 
 **1. Author a `schema.toml`** in your target's source tree:
 
@@ -140,23 +140,30 @@ type = "boolean"
 required = true
 ```
 
-At build time the `JsBaoCodegenPlugin` SwiftPM plugin emits a `PrimitiveModel`-conforming `TodoRecord` struct — you don't hand-write the boilerplate. See [Swift model codegen](../../../js-bao-wss-swift/swift-client/docs/codegen.md) and [TypedModel authoring](../../../js-bao-wss-swift/swift-client/docs/baomodels.md) for the full schema vocabulary.
+At build time the `JsBaoCodegenPlugin` SwiftPM plugin emits a `PrimitiveModel`-conforming `TodoRecord` struct (and adds it to the `GeneratedModels` barrel) — you don't hand-write the boilerplate. See [Swift model codegen](../../../js-bao-wss-swift/swift-client/docs/codegen.md) for the full schema vocabulary.
 
-**2. Subclass `PrimitiveAppState`** to attach the typed model:
+**2. Subclass `PrimitiveAppState`** — register your models once, then read/write through the facade:
 
 ```swift
 @MainActor
 final class MyAppState: PrimitiveAppState {
-    @Published var todoModel: TypedModel<TodoRecord>?
+    @Published var todos: [TodoRecord] = []
 
-    override func onDocumentOpened(documentId: String) {
-        guard let client, let doc = client.getDoc(documentId) else { return }
-        todoModel = makeTypedModel(doc: doc, documentId: documentId)
+    override func connectClient() async {
+        await super.connectClient()
+        // Register every codegen'd model so each open doc is mirrored into the
+        // client's shared cross-document store. The base class does NOT do this.
+        if let client { GeneratedModels.register(on: client) }
+    }
+
+    override func onDocumentOpened(doc: YDocument, documentId: String) async {
+        todos = TodoRecord.query()                       // read (cross-doc; scope with QueryOptions)
+        // write: try TodoRecord(text: "Hi", completed: false).save(in: documentId)
     }
 }
 ```
 
-Prefer `makeTypedModel(doc:documentId:)` over constructing `TypedModel<T>(doc:)` directly — the helper also registers the model with the debug inspector.
+No per-doc model wrappers — `Model.query()` / `record.save(in:)` are the whole API. (The template's `TemplateAppState` already wires `GeneratedModels.register(on:)` in `connectClient()`.)
 
 **3. Update `@main`** to use the subclass, and inject it twice — once as the base, once as the subclass — so library views (`AuthGateView`, etc.) resolve `PrimitiveAppState` and your views resolve `MyAppState`. See [PrimitiveApp library docs §"Inject the subclass twice"](../../swift-primitive-app/docs/README.md#patterns-that-show-up-everywhere):
 
@@ -177,9 +184,7 @@ WindowGroup {
 >
 > Copy the working setup from the demo's [`Package.swift`](../../primitive-app-demo/Package.swift) and [`Sources/PrimitiveAppDemo/Models/schema.toml`](../../primitive-app-demo/Sources/PrimitiveAppDemo/Models/schema.toml) when you add your first model.
 
-The [demo app](../../primitive-app-demo) uses this pattern at scale across multiple `TypedModel` types and a sidebar of feature pages. Borrow as much from it as you want.
-
-> **Legacy `BaoModel<T>`?** Older apps used a separate `BaoModel<T>` class with a different constructor (`BaoModel<T>(doc:client:documentId:)`). It still works, but new code should use `TypedModel<T>` — see the [note in swift-primitive-app docs](../../swift-primitive-app/docs/README.md#1-primitiveappstate--owns-everything).
+The [demo app](../../primitive-app-demo) uses this pattern at scale across multiple models and a sidebar of feature pages. Borrow as much from it as you want.
 
 ### Use a different `primitive.json`
 
