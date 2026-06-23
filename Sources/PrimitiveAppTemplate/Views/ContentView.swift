@@ -62,9 +62,8 @@ struct AppTabView: View {
 //   @StateObject private var loader = BaoDataLoader<[ItemRecord]>()
 //   ...
 //   .task {
-//       guard let items = appState.items else { return }
-//       loader.bind(client: appState.client, subscribeTo: [.onModelChange(items)]) { _ in
-//           items.findAll().sorted { $0.createdAt > $1.createdAt }
+//       loader.bind(client: appState.client, subscribeTo: [.onModel(subscribe: ItemRecord.subscribe)]) { _ in
+//           try await ItemRecord.findAll().sorted { $0.createdAt > $1.createdAt }
 //       }
 //   }
 //

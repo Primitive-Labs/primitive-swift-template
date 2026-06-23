@@ -15,10 +15,10 @@ import JsBaoClient
 /// 1. After the websocket connects, resolve-or-create one user-scoped
 ///    document via an atomic alias upsert (`getOrCreateWithAlias`).
 /// 2. Open that doc through the base class's `selectDocumentAwaiting`
-///    so sync/remoteUpdate event routing and the debug inspector stay
+///    so sync-state event routing and the debug inspector stay
 ///    consistent.
 /// 3. Read your models with the cross-document facade
-///    (`ItemRecord.query()` / `ItemRecord.findAll()`) and write with
+///    (`ItemRecord.query()` / `try await ItemRecord.findAll()`) and write with
 ///    `try ItemRecord(...).save(in: documentId)`. The codegen facade is
 ///    backed by the default client (`JsBaoClient.configureDefault`),
 ///    which the base class wires for you — no per-doc model binding.
@@ -127,7 +127,7 @@ final class TemplateAppState: PrimitiveAppState {
 
             // `selectDocumentAwaiting` is the base class's full open
             // flow: it closes any prior doc, opens this one, routes
-            // the base class's sync / remoteUpdate hooks at this doc
+            // the base class's sync-state hooks at this doc
             // id, and finally calls `onDocumentOpened(doc:documentId:)`
             // below with the live YDocument. Prefer this over a raw
             // `client.openDocument(...)` so the base bookkeeping —
