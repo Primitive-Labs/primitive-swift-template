@@ -32,6 +32,33 @@ struct ContentView: View {
                 appState.transientError = nil
             }
         }
+        // Incoming links (deep links / universal links / notification-tap
+        // URLs). Primitive's own link shapes get default handling via the
+        // library — document share links open, invitation links are
+        // accepted, magic links sign in. Web links are trusted only after
+        // you set `appState.client?.links.appBaseURL` or `trustedLinkHosts`;
+        // custom-scheme links are OS-scoped and work without that.
+        // `.notAPlatformLink` is where your app's own routes go.
+        //
+        // To actually RECEIVE links you still need at least one transport:
+        // a custom URL scheme (CFBundleURLTypes in Info.plist) and/or
+        // universal links (`applinks:` associated domain + your web domain
+        // serving apple-app-site-association). The demo app's Deep Links
+        // page walks through both.
+        .onOpenURL { url in
+            Task {
+                do {
+                    let outcome = try await appState.routePlatformLink(url)
+                    if case .notAPlatformLink(let unhandled) = outcome {
+                        // TODO: your app-specific routes go here, e.g.
+                        // `myapp://settings` → open the settings screen.
+                        appState.setTransientError("No route for link: \(unhandled.absoluteString)")
+                    }
+                } catch {
+                    appState.setTransientError("Couldn't open link: \(error.localizedDescription)")
+                }
+            }
+        }
     }
 }
 
