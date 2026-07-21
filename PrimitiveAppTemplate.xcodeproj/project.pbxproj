@@ -93,7 +93,7 @@
 			);
 			sourceTree = "<group>";
 		};
-		"TEMP_93BAF35F-E0E8-439C-BF12-3A622C9CB599" /* Models */ = {
+		"TEMP_9A285B30-A291-44AE-AE89-4008106C95D4" /* Models */ = {
 			isa = PBXGroup;
 			children = (
 			);
@@ -495,7 +495,7 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/Primitive-Labs/swift-client.git";
 			requirement = {
-				branch = main;
+				branch = alpha;
 				kind = branch;
 			};
 		};
@@ -503,7 +503,7 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/Primitive-Labs/swift-primitive-app.git";
 			requirement = {
-				branch = main;
+				branch = alpha;
 				kind = branch;
 			};
 		};

@@ -11,12 +11,12 @@ let package = Package(
         .executable(name: "primitive-app-template", targets: ["PrimitiveAppTemplate"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/Primitive-Labs/swift-primitive-app.git", branch: "main"),
+        .package(url: "https://github.com/Primitive-Labs/swift-primitive-app.git", branch: "alpha"),
         // Direct `JsBaoClient` dep so the build-tool plugin reference
         // below resolves. The same package is pulled in transitively
         // through `PrimitiveApp`, but SPM plugin references must name a
         // package the consuming manifest depends on directly.
-        .package(url: "https://github.com/Primitive-Labs/swift-client.git", branch: "main"),
+        .package(url: "https://github.com/Primitive-Labs/swift-client.git", branch: "alpha"),
     ],
     targets: [
         .executableTarget(

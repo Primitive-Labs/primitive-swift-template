@@ -7,12 +7,12 @@ options:
 packages:
   PrimitiveApp:
     url: https://github.com/Primitive-Labs/swift-primitive-app.git
-    branch: main
+    branch: alpha
   # Direct dep so `run-ios.sh` can `swift run swift-bao-codegen`
   # against the same package graph the SPM plugin uses.
   JsBaoClient:
     url: https://github.com/Primitive-Labs/swift-client.git
-    branch: main
+    branch: alpha
 targets:
   PrimitiveAppTemplate:
     type: application
