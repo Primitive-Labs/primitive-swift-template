@@ -18,13 +18,13 @@ targets:
     type: application
     platform: [iOS, macOS]
     sources:
-      # `schema.toml` is consumed at *build time* by `swift-bao-codegen`
+      # `models.toml` is consumed at *build time* by `swift-bao-codegen`
       # and inlined into the generated `*Record.swift` files — exclude
       # it from the Xcode source scan so it doesn't end up bundled as
       # an app resource.
       - path: Sources/PrimitiveAppTemplate
         excludes:
-          - "**/Models/schema.toml"
+          - "**/Models/models.toml"
           # `Models/Generated/README.md` documents the dir for source
           # control; it's not a build input. Without this exclude
           # xcodegen treats it as a resource and bundles it into the
@@ -66,7 +66,8 @@ targets:
         # Signing -- set DEVELOPMENT_TEAM to your Apple Team ID to enable
         # code signing. Empty value works for the iOS Simulator (unsigned dev
         # builds) but cannot be deployed to a real device or TestFlight.
-        # To set it later: `primitive apple set-team-id <YOUR_TEAM_ID>`
+        # To set it later: edit DEVELOPMENT_TEAM below, then re-run ./run-ios.sh
+        # (xcodegen regenerates the .xcodeproj from this file).
         # Find your Team ID: https://developer.apple.com/account -> Membership Details
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: ""

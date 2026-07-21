@@ -83,7 +83,7 @@ struct AppTabView: View {
 // MARK: - Home — replace this with your app's main view.
 //
 // `appState` is the `TemplateAppState` subclass of `PrimitiveAppState`.
-// Once you've added a model to `Models/schema.toml` and bound it in
+// Once you've added a model to `Models/models.toml` and bound it in
 // `TemplateAppState.onDocumentOpened`, you read from it here — e.g.:
 //
 //   @StateObject private var loader = BaoDataLoader<[ItemRecord]>()
@@ -94,8 +94,8 @@ struct AppTabView: View {
 //       }
 //   }
 //
-// See the agent guide (`primitive guides get swift-client`) for the
-// full pattern including writes, queries, and reactivity.
+// See the agent guide (`primitive guides get documents --language swift`)
+// for the full pattern including writes, queries, and reactivity.
 
 struct HomeView: View {
     @EnvironmentObject var appState: TemplateAppState
@@ -118,7 +118,7 @@ struct HomeView: View {
             Text("Your app here")
                 .font(.title2)
                 .fontWeight(.medium)
-            Text("Edit `Views/ContentView.swift` to replace this view, then add models to `Models/schema.toml` and bind them in `TemplateAppState.onDocumentOpened`.")
+            Text("Edit `Views/ContentView.swift` to replace this view, then add models to `Models/models.toml` and bind them in `TemplateAppState.onDocumentOpened`.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

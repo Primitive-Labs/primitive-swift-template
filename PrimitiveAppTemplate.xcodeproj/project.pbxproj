@@ -9,10 +9,8 @@
 /* Begin PBXBuildFile section */
 		0E8994141C59D43CA56462CC /* TemplateAppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C934310B61B44B705E1BADC3 /* TemplateAppState.swift */; };
 		120B6E381F80C5FB42F5011F /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 135CFAE383816AA82D2E7ABC /* ContentView.swift */; };
-		1521DD7DD5C40368D75CAEF8 /* GeneratedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64602A5999FED452D08D1C8C /* GeneratedModels.swift */; };
 		331878111FF701AEEFB9FCD7 /* TransientErrorToast.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C31B7DDF07F0DE1943537DC /* TransientErrorToast.swift */; };
 		3DAAD14B25D20A73792BBD26 /* TransientErrorToast.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C31B7DDF07F0DE1943537DC /* TransientErrorToast.swift */; };
-		44FEDD5CDAD051B03ADDA112 /* GeneratedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64602A5999FED452D08D1C8C /* GeneratedModels.swift */; };
 		78105CFE4C34EB6474CF630C /* TemplateAppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C934310B61B44B705E1BADC3 /* TemplateAppState.swift */; };
 		9EB87E8D302E544E4F7A9EEF /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 135CFAE383816AA82D2E7ABC /* ContentView.swift */; };
 		A91E5E9DDA71ED6CC05DEE8C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 145FA2287630E2F15774810F /* Assets.xcassets */; };
@@ -29,7 +27,6 @@
 		135CFAE383816AA82D2E7ABC /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		145FA2287630E2F15774810F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		22D4EDF4ABD3438AF6ED5C83 /* primitive.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = primitive.json; sourceTree = "<group>"; };
-		64602A5999FED452D08D1C8C /* GeneratedModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneratedModels.swift; sourceTree = "<group>"; };
 		8C31B7DDF07F0DE1943537DC /* TransientErrorToast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransientErrorToast.swift; sourceTree = "<group>"; };
 		9814C93D1BCC3782D1267EF2 /* PrimitiveAppTemplate.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PrimitiveAppTemplate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		ADCCB791BA52ED925B364656 /* PrimitiveAppTemplate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PrimitiveAppTemplate.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -75,28 +72,11 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
-		9BE20119DBBF8AB8CB31FC0A /* Generated */ = {
-			isa = PBXGroup;
-			children = (
-				64602A5999FED452D08D1C8C /* GeneratedModels.swift */,
-			);
-			path = Generated;
-			sourceTree = "<group>";
-		};
-		AF5D95645D92B75804072D46 /* Models */ = {
-			isa = PBXGroup;
-			children = (
-				9BE20119DBBF8AB8CB31FC0A /* Generated */,
-			);
-			path = Models;
-			sourceTree = "<group>";
-		};
 		D368A51ECD08658579BAA4A9 /* PrimitiveAppTemplate */ = {
 			isa = PBXGroup;
 			children = (
 				D19C365250FD7348EB25D348 /* PrimitiveAppTemplateApp.swift */,
 				C934310B61B44B705E1BADC3 /* TemplateAppState.swift */,
-				AF5D95645D92B75804072D46 /* Models */,
 				898260CA33E2084A93EE1E01 /* Views */,
 			);
 			name = PrimitiveAppTemplate;
@@ -111,6 +91,13 @@
 				D368A51ECD08658579BAA4A9 /* PrimitiveAppTemplate */,
 				4F5DDDC6D96B87516F7C5823 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		"TEMP_56D3BC73-62BD-4141-A6EB-F948F7C5837D" /* Models */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Models;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -176,7 +163,6 @@
 				};
 			};
 			buildConfigurationList = 28E612FA4A58C5499F935BFC /* Build configuration list for PBXProject "PrimitiveAppTemplate" */;
-			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -190,6 +176,7 @@
 				A83669E314E56E52F554392A /* XCRemoteSwiftPackageReference "swift-primitive-app" */,
 			);
 			preferredProjectObjectVersion = 77;
+			productRefGroup = 4F5DDDC6D96B87516F7C5823 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -226,7 +213,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				120B6E381F80C5FB42F5011F /* ContentView.swift in Sources */,
-				44FEDD5CDAD051B03ADDA112 /* GeneratedModels.swift in Sources */,
 				A992A475798C9E1AD8F93786 /* PrimitiveAppTemplateApp.swift in Sources */,
 				0E8994141C59D43CA56462CC /* TemplateAppState.swift in Sources */,
 				331878111FF701AEEFB9FCD7 /* TransientErrorToast.swift in Sources */,
@@ -238,7 +224,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				9EB87E8D302E544E4F7A9EEF /* ContentView.swift in Sources */,
-				1521DD7DD5C40368D75CAEF8 /* GeneratedModels.swift in Sources */,
 				DB584A6C891EA9C928A9DFC5 /* PrimitiveAppTemplateApp.swift in Sources */,
 				78105CFE4C34EB6474CF630C /* TemplateAppState.swift in Sources */,
 				3DAAD14B25D20A73792BBD26 /* TransientErrorToast.swift in Sources */,

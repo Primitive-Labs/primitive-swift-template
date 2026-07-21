@@ -33,7 +33,7 @@ verification checklist at the end of every UI-editing session.
 - After scaffolding a new SwiftUI view from any source.
 
 Skip when:
-- Editing pure data/model files (`schema.toml`, `*Record.swift`, app-state
+- Editing pure data/model files (`models.toml`, `*Record.swift`, app-state
   business logic) — the `primitive-platform` skill covers those.
 - Editing tests.
 - The project is not Primitive-based (no `PrimitiveApp` / `JsBaoClient`
@@ -190,18 +190,18 @@ Button { pendingShare = .document(documentId: ref.documentId, title: ref.title) 
 Make `Target` `Identifiable` if it isn't already (computed `id` based on
 the discriminator + payload id).
 
-### 7. Detail views auto-pop on `documentDeleted`
+### 7. Detail views auto-pop when the open document is deleted
 
-When a detail view opens a document, subscribe to `.documentDeleted` and
-pop the view on match:
+When a detail view opens a document, subscribe to `.documentMetadataChanged`,
+gate on `action == "deleted"`, and pop the view on match:
 
 ```swift
 @State private var deletedSub: EventSubscription?
 
 .task {
-    deletedSub = appState.client?.events.on(.documentDeleted) { [weak self] (ev: DocumentDeletedEvent) in
+    deletedSub = appState.client?.events.on(.documentMetadataChanged) { [weak self] (ev: DocumentMetadataChangedEvent) in
         Task { @MainActor in
-            guard let self, ev.documentId == self.documentId else { return }
+            guard let self, ev.action == "deleted", ev.documentId == self.documentId else { return }
             self.dismiss()
         }
     }
@@ -209,8 +209,12 @@ pop the view on match:
 .onDisappear { deletedSub?.cancel() }
 ```
 
-Without this, deleting a doc on another device (or being unshared)
-leaves the user staring at zombie data until they navigate away manually.
+`.documentMetadataChanged` fires for every metadata transition — its `action`
+is one of `"created"`, `"updated"`, `"deleted"`, or `"evicted"` — so check for
+`action == "deleted"` to pop only when this document is actually deleted or
+revoked (the server clears the metadata and sends `action == "deleted"` for
+both). Without this, deleting a doc on another device (or being unshared)
+leaves the user staring at stale data until they navigate away manually.
 
 ### 8. Multi-doc apps: openAuxiliaryDoc, not selectDocumentAwaiting
 
@@ -385,7 +389,7 @@ Run after every SwiftUI editing session:
       reconcile), not on `canEdit`.
 - [ ] Item-targeted sheets use `.sheet(item:)`, not
       `.sheet(isPresented:) + @State selection`.
-- [ ] Detail views opening a single doc subscribe to `.documentDeleted`
+- [ ] Detail views opening a single doc subscribe to `.documentMetadataChanged` and pop on `action == "deleted"`
       and pop on match.
 - [ ] Multi-doc apps use `openAuxiliaryDoc` (NOT `selectDocumentAwaiting`)
       for transient detail-view docs.

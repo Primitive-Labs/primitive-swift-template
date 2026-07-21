@@ -56,7 +56,7 @@ done
 # here, writing into a checked-out `Generated/` directory that xcodegen
 # picks up below.
 GEN_DIR="Sources/PrimitiveAppTemplate/Models/Generated"
-SCHEMA_TOML="Sources/PrimitiveAppTemplate/Models/schema.toml"
+SCHEMA_TOML="Sources/PrimitiveAppTemplate/Models/models.toml"
 mkdir -p "$GEN_DIR"
 echo "Running swift-bao-codegen..."
 swift run --package-path . swift-bao-codegen \

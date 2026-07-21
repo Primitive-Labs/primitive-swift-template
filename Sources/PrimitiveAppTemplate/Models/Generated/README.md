@@ -9,7 +9,7 @@ NOT EDIT.` and are owned by the codegen pipeline.
   (Xcode/iOS path). Your edits will silently disappear.
 - **Codegen sweeps stale files.** Any `*.swift` in this directory that
   carries the generated banner *and* isn't emitted on the current run
-  gets deleted. So a model removed from `schema.toml` cleans up its
+  gets deleted. So a model removed from `models.toml` cleans up its
   emitted file automatically.
 - **Companions live one level up** — alongside `Models/`, not inside
   `Generated/`. Files like `TodoItem+Extensions.swift` go in
@@ -23,5 +23,5 @@ in `Package.swift` references it — without the path existing on a fresh
 clone the build can be confusing for first-time readers.
 
 For the full codegen wiring (SwiftPM plugin, `run-ios.sh` manual
-invocation, schema syntax), see the swift-client agent guide:
-`primitive guides get swift-client`.
+invocation, schema syntax), see the Swift documents guide:
+`primitive guides get documents --language swift`.

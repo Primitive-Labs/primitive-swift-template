@@ -101,7 +101,7 @@ build_for_simulator() {
     local udid="$1"
     log "Running swift-bao-codegen..."
     local gen_dir="Sources/PrimitiveAppTemplate/Models/Generated"
-    local schema_toml="Sources/PrimitiveAppTemplate/Models/schema.toml"
+    local schema_toml="Sources/PrimitiveAppTemplate/Models/models.toml"
     mkdir -p "$gen_dir"
     swift run --package-path . swift-bao-codegen \
         --input  "$schema_toml" \

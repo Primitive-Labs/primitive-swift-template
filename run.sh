@@ -15,7 +15,7 @@ cd "$(dirname "$0")"
 # files. Run codegen explicitly into `Models/Generated/` so the source
 # tree stays the source of truth for tooling. Mirrors `run-ios.sh`.
 GEN_DIR="Sources/PrimitiveAppTemplate/Models/Generated"
-SCHEMA_TOML="Sources/PrimitiveAppTemplate/Models/schema.toml"
+SCHEMA_TOML="Sources/PrimitiveAppTemplate/Models/models.toml"
 mkdir -p "$GEN_DIR"
 swift run --package-path . swift-bao-codegen \
     --input  "$SCHEMA_TOML" \

@@ -1,6 +1,6 @@
 # app_identifier and team_id are both pulled from project.yml at runtime
-# so this file stays generic across scaffolded apps. Update project.yml
-# (or run `primitive apple set-team-id <id>`) instead of editing here.
+# so this file stays generic across scaffolded apps. Set DEVELOPMENT_TEAM
+# in project.yml instead of editing here.
 
 def read_project_yml(key)
   yml = File.read(File.expand_path("../project.yml", __dir__))

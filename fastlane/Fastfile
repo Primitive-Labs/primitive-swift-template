@@ -63,7 +63,7 @@ def require_team_id
   if team_id.nil? || team_id.empty?
     UI.user_error!(
       "DEVELOPMENT_TEAM is empty in project.yml. " \
-      "Run `primitive apple set-team-id <YOUR_TEAM_ID>` to enable signing. " \
+      "Set it to your Apple Team ID (then re-run ./run-ios.sh) to enable signing. " \
       "Find your Team ID at https://developer.apple.com/account -> Membership."
     )
   end
@@ -309,7 +309,7 @@ lane :status do
   UI.message("Version: #{v[:version]} (#{v[:build]})")
   UI.message("Bundle ID: #{bundle_id}")
   if team_id.nil? || team_id.empty?
-    UI.important("Team ID: (unset — simulator only; run `primitive apple set-team-id <id>`)")
+    UI.important("Team ID: (unset — simulator only; set DEVELOPMENT_TEAM in project.yml)")
   else
     UI.message("Team ID: #{team_id}")
   end
