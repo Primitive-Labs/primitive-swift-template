@@ -90,7 +90,7 @@ struct AppTabView: View {
 //   ...
 //   .task {
 //       loader.bind(client: appState.client, subscribeTo: [.onModel(subscribe: ItemRecord.subscribe)]) { _ in
-//           try await ItemRecord.findAll().sorted { $0.createdAt > $1.createdAt }
+//           try ItemRecord.findAll().sorted { $0.createdAt > $1.createdAt }
 //       }
 //   }
 //
