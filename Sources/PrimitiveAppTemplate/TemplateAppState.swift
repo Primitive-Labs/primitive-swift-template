@@ -18,7 +18,7 @@ import JsBaoClient
 ///    so sync-state event routing and the debug inspector stay
 ///    consistent.
 /// 3. Read your models with the cross-document facade
-///    (`ItemRecord.query()` / `try await ItemRecord.findAll()`) and write with
+///    (`ItemRecord.query()` / `try ItemRecord.findAll()`) and write with
 ///    `try ItemRecord(...).save(in: documentId)`. The codegen facade is
 ///    backed by the default client (`JsBaoClient.configureDefault`),
 ///    which the base class wires for you — no per-doc model binding.
