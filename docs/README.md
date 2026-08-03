@@ -209,6 +209,15 @@ The template ships **both** a `Package.swift` and a `PrimitiveAppTemplate.xcodep
 
 Because this is SPM-based, **adding a new `.swift` file is just creating it on disk** — both the SPM build and the Xcode project pick it up automatically. (This is different from an app that uses an Xcode project as the source of truth, which requires `project.pbxproj` edits when you add files.)
 
+## Smoke-testing the UI
+
+`scripts/smoke-test.sh` runs simulator smoke tests that catch runtime failures a plain build misses:
+
+- `bash scripts/smoke-test.sh` — the zero-dependency default: launches the app and asserts it survives without crashing.
+- `bash scripts/smoke-test.sh ui_signin` — an [idb](https://fbidb.io/)-driven test that signs in end-to-end and asserts the post-login screen renders. This one needs idb installed and a `+primitivetest` account; run `bash scripts/smoke-test.sh --list` to see both, and see the DevTools agent guide (`primitive guides get devtools --language swift`) for the idb setup and how it complements the Debug Inspector.
+
+`ui_signin` is opt-in, so the default run never requires idb.
+
 ## Where to look next
 
 - **Library reference:** [swift-primitive-app/docs/README.md](https://github.com/Primitive-Labs/swift-primitive-app/blob/main/docs/README.md) — what every public type does, and why

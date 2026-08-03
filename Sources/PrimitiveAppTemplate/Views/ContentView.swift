@@ -126,6 +126,12 @@ struct HomeView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle("Home")
+        // Stable identifier for the post-login smoke test: the idb
+        // `ui_signin` scenario (`scripts/smoke-test.sh`) asserts this
+        // element renders after sign-in. If you replace this view, either
+        // keep the identifier or point the scenario at your own screen via
+        // PRIMITIVE_SMOKE_SUCCESS_ID. See the DevTools agent guide.
+        .accessibilityIdentifier("primitive.template.home")
     }
 }
 
