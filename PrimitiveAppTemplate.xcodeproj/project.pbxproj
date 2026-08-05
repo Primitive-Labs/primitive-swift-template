@@ -93,7 +93,7 @@
 			);
 			sourceTree = "<group>";
 		};
-		"TEMP_57867089-1F18-4F1C-8454-73AD9C1DE4C5" /* Models */ = {
+		"TEMP_B5673A52-421C-42A2-8EE2-D35C3604C04D" /* Models */ = {
 			isa = PBXGroup;
 			children = (
 			);
@@ -255,7 +255,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.primitivelabs.PrimitiveAppTemplate;
 				PRODUCT_NAME = PrimitiveAppTemplate;
 				SDKROOT = macosx;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
 		};
@@ -318,7 +318,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
 		};
@@ -344,7 +344,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.primitivelabs.PrimitiveAppTemplate;
 				PRODUCT_NAME = PrimitiveAppTemplate;
 				SDKROOT = iphoneos;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
@@ -371,7 +371,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.primitivelabs.PrimitiveAppTemplate;
 				PRODUCT_NAME = PrimitiveAppTemplate;
 				SDKROOT = iphoneos;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
@@ -398,7 +398,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.primitivelabs.PrimitiveAppTemplate;
 				PRODUCT_NAME = PrimitiveAppTemplate;
 				SDKROOT = macosx;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
 		};
@@ -454,7 +454,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
 		};

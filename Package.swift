@@ -1,4 +1,4 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.0
 import PackageDescription
 
 let package = Package(
@@ -36,5 +36,10 @@ let package = Package(
                 .plugin(name: "JsBaoCodegenPlugin", package: "swift-client"),
             ]
         ),
-    ]
+    ],
+    // Swift 6 language mode for the whole package (#2310). Strict concurrency
+    // checking is `complete` and its diagnostics are hard errors, matching the
+    // JsBaoClient package this template builds on. Mirrored in
+    // `demo-apps/swift-template-demo`.
+    swiftLanguageModes: [.v6]
 )
