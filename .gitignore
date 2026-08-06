@@ -24,6 +24,11 @@ Sources/PrimitiveAppTemplate/Models/Generated/*.swift
 .credentials.json
 credentials.json
 
+# Primitive CLI local state (.primitive/config.json IS committed; these are per-machine)
+.primitive/credentials.json
+.primitive/sync-backups/
+.primitive/sync/**/.snapshots/
+
 # Fastlane / App Store Connect — never commit credentials
 fastlane/.env
 fastlane/api_key.p8
