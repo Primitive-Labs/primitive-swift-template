@@ -154,6 +154,11 @@ build_for_simulator() {
         xcodegen generate --quiet
     fi
 
+    # xcodebuild resolves packages from its own pin inside the .xcodeproj,
+    # which `swift package update` never touches — so the build below could
+    # otherwise use a different revision than the codegen above just ran.
+    bash scripts/sync-xcode-pins.sh "$PROJECT"
+
     local derived="$PWD/build/smoke"
     log "xcodebuild → $derived ..."
     xcodebuild \

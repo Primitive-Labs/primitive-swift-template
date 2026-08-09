@@ -1,5 +1,14 @@
 default_platform(:ios)
 
+# xcodebuild — and `build_app`, which wraps it — resolves packages from Xcode's
+# own pin inside the .xcodeproj, which `swift package update` never touches. Copy
+# the app's Package.resolved over it before any lane builds, or an upload can
+# ship the revision Xcode last resolved instead of the one the app is pinned to.
+# See scripts/sync-xcode-pins.sh. (`sh` runs from the fastlane directory.)
+before_all do
+  sh("bash ../scripts/sync-xcode-pins.sh")
+end
+
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------

@@ -19,6 +19,12 @@ PROJECT="PrimitiveAppTemplate.xcodeproj"
 BUILD_DIR=".build/archives"
 mkdir -p "$BUILD_DIR"
 
+# xcodebuild resolves packages from its own pin inside the .xcodeproj, which
+# `swift package update` never touches. Without this an archive can ship the
+# revision Xcode last resolved rather than the one the app is pinned to. See
+# the script's header.
+bash scripts/sync-xcode-pins.sh "$PROJECT"
+
 # Check for team ID
 check_team_id() {
     local team_id

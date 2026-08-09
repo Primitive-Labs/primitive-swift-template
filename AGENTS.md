@@ -41,6 +41,18 @@ Two dev tools cover different halves of "does my change work," and they pair up:
 
    `ui_signin` is opt-in and needs idb plus a `+primitivetest` test account; its preflight prints the exact setup if a prerequisite is missing. The framing: **idb drives the UI, the Inspector asserts the resulting state.**
 
+**Driving the UI ad hoc** (a bug repro, or any tap/typing outside the canned scenario) — use idb for that too. Do NOT drive the app's UI with `osascript` / System Events / macOS accessibility clicking: it makes the user grant assistive access to the whole machine at a permission prompt, it can't see inside a SwiftUI surface, and it taps fixed screen coordinates that break on any layout change. Device-level operations all have real CLI equivalents — reach for `xcrun simctl` (`io booted screenshot`, `openurl`, `privacy`, `erase`) instead of automating the Simulator.app menu bar.
+
+```sh
+xcrun simctl list devices booted                   # the booted simulator's UDID
+idb_companion --udid <UDID> --grpc-port 10882 &    # start a companion
+idb --companion localhost:10882 ui describe-all    # AX tree; a SwiftUI .accessibilityIdentifier shows up as AXUniqueId
+idb --companion localhost:10882 ui tap <X> <Y>     # tap the center of that element's frame, in integer points
+idb --companion localhost:10882 ui text "hello"    # type into the focused field
+idb --companion localhost:10882 ui key 40          # 40 = Return
+xcrun simctl io booted screenshot /tmp/shot.png    # see what happened
+```
+
 For the idb install steps (including the Python 3.12 requirement for `fb-idb`), the `+primitivetest` prerequisite, and the full command reference, read the DevTools guide:
 
 ```sh

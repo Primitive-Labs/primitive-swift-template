@@ -74,6 +74,13 @@ else
     echo "  Install with: brew install xcodegen"
 fi
 
+# xcodebuild resolves packages from its own pin inside the .xcodeproj, which
+# `swift package update` never touches — so without this the build below can
+# compile against a different revision than the codegen above just ran. Runs
+# after xcodegen, which rewrites the container the pin lives in. See the
+# script's header.
+bash scripts/sync-xcode-pins.sh "$PROJECT"
+
 # ────────────────────────────────────────────────────────────────────────────
 # Physical device path (--device)
 # ────────────────────────────────────────────────────────────────────────────
