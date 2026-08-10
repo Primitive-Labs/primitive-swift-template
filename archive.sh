@@ -8,7 +8,8 @@
 #
 # Prerequisites:
 #   - Apple Developer account ($99/year)
-#   - Set DEVELOPMENT_TEAM in project.yml to your Team ID, then run: xcodegen generate
+#   - Set DEVELOPMENT_TEAM in project.yml to your Team ID (this script regenerates
+#     the Xcode project from project.yml on every run, so no extra step)
 #   - For TestFlight/App Store: app must be registered in App Store Connect
 #   - For notarized DMG: requires Developer ID certificate
 #
@@ -19,11 +20,11 @@ PROJECT="PrimitiveAppTemplate.xcodeproj"
 BUILD_DIR=".build/archives"
 mkdir -p "$BUILD_DIR"
 
-# xcodebuild resolves packages from its own pin inside the .xcodeproj, which
-# `swift package update` never touches. Without this an archive can ship the
-# revision Xcode last resolved rather than the one the app is pinned to. See
-# the script's header.
-bash scripts/sync-xcode-pins.sh "$PROJECT"
+# Regenerate the Xcode project from project.yml, then re-copy the app's package
+# pin into it. Without the pin sync an archive can ship the revision Xcode last
+# resolved rather than the one the app is pinned to. See
+# scripts/regenerate-project.sh.
+bash scripts/regenerate-project.sh "$PROJECT"
 
 # Check for team ID
 check_team_id() {
@@ -35,7 +36,7 @@ check_team_id() {
         echo "To fix this:"
         echo "  1. Get your Team ID from https://developer.apple.com/account -> Membership Details"
         echo "  2. Set DEVELOPMENT_TEAM in project.yml"
-        echo "  3. Run: xcodegen generate"
+        echo "  3. Re-run this script — it regenerates the Xcode project from project.yml"
         echo ""
         echo "An Apple Developer account (\$99/year) is required for distribution."
         exit 1

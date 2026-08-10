@@ -134,14 +134,30 @@ for dl in d['devices'].values():
         fail "Simulator '$SIM_NAME' not available. Set PRIMITIVE_SMOKE_SIM or install via Xcode."
         return 1
     fi
-    xcrun simctl boot "$udid"
+    # Checked explicitly: this function runs inside a command substitution,
+    # which does not inherit `set -e`, so a failed boot would otherwise fall
+    # through and echo a UDID nothing is running on.
+    if ! xcrun simctl boot "$udid"; then
+        fail "Could not boot simulator '$SIM_NAME' ($udid)."
+        return 1
+    fi
     open -ga Simulator
     echo "$udid"
 }
 
-# Build for the booted simulator. Echoes the .app path on success.
+# Build for the booted simulator. Sets $APP_PATH to the built .app on success.
+#
+# This deliberately reports through a variable instead of echoing the path,
+# so callers can run it as a plain command. Under `APP_PATH=$(build_for_simulator …)`
+# the whole build ran in a command-substitution subshell, which does not
+# inherit `set -e` (bash has no `inherit_errexit`): a failed xcodebuild did
+# not stop the function, the `find` below still matched the partial bundle
+# xcodebuild copies resources into before compiling, and the run went on to
+# install an app with no executable — burying the compile error under
+# unrelated install/launch errors (#2582).
 build_for_simulator() {
     local udid="$1"
+    APP_PATH=""
     log "Running swift-bao-codegen..."
     local gen_dir="Sources/PrimitiveAppTemplate/Models/Generated"
     local schema_toml="Sources/PrimitiveAppTemplate/Models/models.toml"
@@ -150,18 +166,15 @@ build_for_simulator() {
         --input  "$schema_toml" \
         --output "$gen_dir" >/dev/null
 
-    if command -v xcodegen >/dev/null 2>&1; then
-        xcodegen generate --quiet
-    fi
-
-    # xcodebuild resolves packages from its own pin inside the .xcodeproj,
-    # which `swift package update` never touches — so the build below could
-    # otherwise use a different revision than the codegen above just ran.
-    bash scripts/sync-xcode-pins.sh "$PROJECT"
+    # Regenerate the project so the sources codegen just wrote are in it, then
+    # re-copy the app's package pin into the container that regeneration
+    # rewrote — otherwise the build below could use a different revision than
+    # the codegen above just ran. See scripts/regenerate-project.sh.
+    bash scripts/regenerate-project.sh "$PROJECT"
 
     local derived="$PWD/build/smoke"
     log "xcodebuild → $derived ..."
-    xcodebuild \
+    if ! xcodebuild \
         -project "$PROJECT" \
         -scheme "$SCHEME" \
         -configuration Debug \
@@ -169,13 +182,17 @@ build_for_simulator() {
         -derivedDataPath "$derived" \
         -quiet \
         build >&2
+    then
+        fail "xcodebuild failed — see the build output above."
+        return 1
+    fi
     local app_path
     app_path=$(find "$derived/Build/Products" -name "$APP_NAME.app" -type d | head -1)
     if [ -z "${app_path:-}" ]; then
         fail "Built .app not found under $derived"
         return 1
     fi
-    echo "$app_path"
+    APP_PATH="$app_path"
 }
 
 # Returns the count of crash reports for $APP_NAME with mtime >= $1
@@ -677,7 +694,11 @@ log "Booting simulator..."
 UDID=$(boot_simulator)
 log "Using simulator: $UDID"
 
-APP_PATH=$(build_for_simulator "$UDID")
+# Not a command substitution: `set -e` has to reach every command the build
+# runs, so a failed codegen/pin-sync/xcodebuild stops the run here rather than
+# falling through to install a partial bundle (#2582).
+APP_PATH=""
+build_for_simulator "$UDID"
 log "Built app: $APP_PATH"
 
 failures=0

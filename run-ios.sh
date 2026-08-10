@@ -64,22 +64,10 @@ swift run --package-path . swift-bao-codegen \
     --output "$GEN_DIR"
 
 # Regenerate the xcodeproj from project.yml so that newly added source
-# files (including freshly-codegen'd `Generated/*.swift`) get picked up.
-# xcodegen is idempotent + fast; skip silently if not installed (users
-# can still build if their xcodeproj is up to date).
-if command -v xcodegen >/dev/null 2>&1; then
-    xcodegen generate --quiet
-else
-    echo "Warning: xcodegen not installed — xcodeproj may be stale if files were added/removed."
-    echo "  Install with: brew install xcodegen"
-fi
-
-# xcodebuild resolves packages from its own pin inside the .xcodeproj, which
-# `swift package update` never touches — so without this the build below can
-# compile against a different revision than the codegen above just ran. Runs
-# after xcodegen, which rewrites the container the pin lives in. See the
-# script's header.
-bash scripts/sync-xcode-pins.sh "$PROJECT"
+# files (including freshly-codegen'd `Generated/*.swift`) get picked up, and
+# re-copy the app's package pin into the container that regeneration rewrote.
+# Both steps live in scripts/regenerate-project.sh — see its header.
+bash scripts/regenerate-project.sh "$PROJECT"
 
 # ────────────────────────────────────────────────────────────────────────────
 # Physical device path (--device)
