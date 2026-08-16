@@ -500,7 +500,7 @@ print(local.split('+', 1)[0] + '@' + domain)
             # wrong.
             local settings_err_file
             settings_err_file=$(mktemp)
-            settings_json=$(primitive settings show --json 2>"$settings_err_file") || settings_json=""
+            settings_json=$(primitive settings get --json 2>"$settings_err_file") || settings_json=""
             settings_err=$(cat "$settings_err_file")
             rm -f "$settings_err_file"
             problem=$(SMOKE_SETTINGS_JSON="$settings_json" \
