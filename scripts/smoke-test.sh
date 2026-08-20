@@ -414,7 +414,7 @@ preflight_ui_signin() {
 [smoke-test]     1. Add a base email to your app's testAccountBaseEmails, e.g. in app.toml:
 [smoke-test]          [app]
 [smoke-test]          testAccountBaseEmails = ["you@example.com"]
-[smoke-test]        then apply it:  primitive settings push
+[smoke-test]        then apply it:  primitive config push --only app
 [smoke-test]     2. export PRIMITIVE_SMOKE_TEST_EMAIL="you+primitivetest-smoke@example.com"
 [smoke-test]   See the DevTools agent guide (idb section) and the Authentication guide's
 [smoke-test]   "Test User Sign-In" section for the full contract.
@@ -500,7 +500,7 @@ print(local.split('+', 1)[0] + '@' + domain)
             # wrong.
             local settings_err_file
             settings_err_file=$(mktemp)
-            settings_json=$(primitive settings get --json 2>"$settings_err_file") || settings_json=""
+            settings_json=$(primitive apps get --json 2>"$settings_err_file") || settings_json=""
             settings_err=$(cat "$settings_err_file")
             rm -f "$settings_err_file"
             problem=$(SMOKE_SETTINGS_JSON="$settings_json" \
@@ -511,7 +511,12 @@ print(local.split('+', 1)[0] + '@' + domain)
 import json, os, sys
 base = os.environ['SMOKE_BASE_EMAIL']
 try:
-    s = json.loads(os.environ['SMOKE_SETTINGS_JSON'])
+    # `primitive apps get --json` nests the server settings under `settings`
+    # alongside the app's id and name (#2759); a member who cannot read them
+    # gets a null there, which is the same 'cannot see settings' case as a
+    # failed call.
+    payload = json.loads(os.environ['SMOKE_SETTINGS_JSON'])
+    s = payload.get('settings') if isinstance(payload, dict) else None
     if not isinstance(s, dict):
         raise ValueError('settings is not an object')
 except Exception:
@@ -536,8 +541,8 @@ elif mode != 'public' and not invited_ack:
     print('signup mode is ' + mode + ' — the +primitivetest bypass does not skip the '
           'signup gate, so ' + email + ' must already be admitted to the app or OTP '
           'request fails with: This app is invite-only. You have been added to the '
-          'waitlist. Either set mode to public in app.toml and run primitive settings '
-          'push, or invite that exact address (the full +primitivetest string, lowercase '
+          'waitlist. Either set mode to public in app.toml and run primitive config '
+          'push --only app, or invite that exact address (the full +primitivetest string, lowercase '
           '— an invitation for the base address does not cover it; role member) and '
           're-run with PRIMITIVE_SMOKE_TEST_EMAIL_INVITED=1. Invite-only does work with '
           'a pre-invited address; this check just cannot see invitations.'); sys.exit(0)
@@ -556,7 +561,7 @@ print('')
 [smoke-test]     testAccountBaseEmails = ["$base_email"]
 [smoke-test]     [auth]
 [smoke-test]     otpEnabled = true
-[smoke-test]   then:  primitive settings push
+[smoke-test]   then:  primitive config push --only app
 [smoke-test]   A freshly scaffolded app defaults to mode = "invite-only", which rejects
 [smoke-test]   an uninvited address at OTP request — the +primitivetest bypass runs
 [smoke-test]   after that gate, not instead of it. To stay invite-only, invite
