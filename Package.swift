@@ -39,7 +39,6 @@ let package = Package(
     ],
     // Swift 6 language mode for the whole package (#2310). Strict concurrency
     // checking is `complete` and its diagnostics are hard errors, matching the
-    // JsBaoClient package this template builds on. Mirrored in
-    // `demo-apps/swift-template-demo`.
+    // JsBaoClient package this template builds on.
     swiftLanguageModes: [.v6]
 )
