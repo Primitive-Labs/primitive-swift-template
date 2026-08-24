@@ -6,6 +6,10 @@
 #   ./archive.sh mac          -- Archive for macOS (TestFlight / Mac App Store)
 #   ./archive.sh dmg          -- Build a standalone macOS .app (for direct distribution / notarization)
 #
+# Add `--primitive-env <name>` to any of the above to archive against a named
+# Primitive environment instead of the one `primitive env use` selected. The
+# archived bundle carries only that environment's values (#2873).
+#
 # Prerequisites:
 #   - Apple Developer account ($99/year)
 #   - Set DEVELOPMENT_TEAM in project.yml to your Team ID (this script regenerates
@@ -19,6 +23,25 @@ cd "$(dirname "$0")"
 PROJECT="PrimitiveAppTemplate.xcodeproj"
 BUILD_DIR=".build/archives"
 mkdir -p "$BUILD_DIR"
+
+# `--primitive-env <name>` is pulled out before anything else so the resolve
+# step inside regenerate-project.sh (below) sees it. Everything else keeps its
+# position, so `./archive.sh ios` is unchanged.
+MODE_ARGS=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --primitive-env)
+            if [ -z "${2:-}" ]; then
+                echo "--primitive-env requires an environment name" >&2
+                exit 1
+            fi
+            export PRIMITIVE_ENV="$2"; shift 2 ;;
+        --primitive-env=*)
+            export PRIMITIVE_ENV="${1#--primitive-env=}"; shift ;;
+        *) MODE_ARGS+=("$1"); shift ;;
+    esac
+done
+set -- ${MODE_ARGS+"${MODE_ARGS[@]}"}
 
 # Regenerate the Xcode project from project.yml, then re-copy the app's package
 # pin into it. Without the pin sync an archive can ship the revision Xcode last
@@ -195,7 +218,7 @@ case "${1:-}" in
         build_dmg
         ;;
     *)
-        echo "Usage: ./archive.sh [ios|mac|dmg]"
+        echo "Usage: ./archive.sh [ios|mac|dmg] [--primitive-env <name>]"
         echo ""
         echo "  ios  -- Archive for iOS TestFlight / App Store"
         echo "  mac  -- Archive for macOS TestFlight / Mac App Store"

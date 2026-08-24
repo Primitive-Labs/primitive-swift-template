@@ -93,7 +93,7 @@
 			);
 			sourceTree = "<group>";
 		};
-		"TEMP_95DDEBB6-1903-4DFB-A877-D5C12263CD7C" /* Models */ = {
+		"TEMP_D46D4E27-8305-4B41-8CFF-69AF349BFF70" /* Models */ = {
 			isa = PBXGroup;
 			children = (
 			);
@@ -107,6 +107,8 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = F59C74D85510D8329FCF729E /* Build configuration list for PBXNativeTarget "PrimitiveAppTemplate_macOS" */;
 			buildPhases = (
+				F0EC00AAF227FF67D91463C0 /* Generate models from models.toml */,
+				FF7832C1E93960AF032811E4 /* Resolve Primitive environment */,
 				4F875E489A817EBCAD69719D /* Sources */,
 				F50EC587FABFF0A734104C84 /* Resources */,
 				A7AB275B8DABC7C2D3F7B8B8 /* Frameworks */,
@@ -127,6 +129,8 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 0D9537BE88CB186AF7A6775A /* Build configuration list for PBXNativeTarget "PrimitiveAppTemplate_iOS" */;
 			buildPhases = (
+				6A3D5601CECA9C72A1719836 /* Generate models from models.toml */,
+				93D811AC31EFDA697E3CF86E /* Resolve Primitive environment */,
 				752F8F59E7BDE108CE2C7AC0 /* Sources */,
 				27EFFBE3B361537AF7648805 /* Resources */,
 				EC659C628C3C59FBFF35E6C9 /* Frameworks */,
@@ -206,6 +210,95 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		6A3D5601CECA9C72A1719836 /* Generate models from models.toml */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/Sources/PrimitiveAppTemplate/Models/models.toml",
+			);
+			name = "Generate models from models.toml";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/models-codegen.stamp",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "bash \"$SRCROOT/scripts/generate-models.sh\" --verify-project";
+		};
+		93D811AC31EFDA697E3CF86E /* Resolve Primitive environment */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/scripts/resolve-primitive-config.sh",
+				"$(SRCROOT)/.primitive/config.json",
+				"$(SRCROOT)/.primitive/local.json",
+			);
+			name = "Resolve Primitive environment";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/primitive.json",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "bash \"$SRCROOT/scripts/resolve-primitive-config.sh\"";
+		};
+		F0EC00AAF227FF67D91463C0 /* Generate models from models.toml */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/Sources/PrimitiveAppTemplate/Models/models.toml",
+			);
+			name = "Generate models from models.toml";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/models-codegen.stamp",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "bash \"$SRCROOT/scripts/generate-models.sh\" --verify-project";
+		};
+		FF7832C1E93960AF032811E4 /* Resolve Primitive environment */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/scripts/resolve-primitive-config.sh",
+				"$(SRCROOT)/.primitive/config.json",
+				"$(SRCROOT)/.primitive/local.json",
+			);
+			name = "Resolve Primitive environment";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/primitive.json",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "bash \"$SRCROOT/scripts/resolve-primitive-config.sh\"";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		4F875E489A817EBCAD69719D /* Sources */ = {

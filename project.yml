@@ -13,8 +13,9 @@ packages:
   PrimitiveApp:
     url: https://github.com/Primitive-Labs/swift-primitive-app.git
     branch: alpha
-  # Direct dep so `run-ios.sh` can `swift run swift-bao-codegen`
-  # against the same package graph the SPM plugin uses.
+  # Direct dep so the codegen phase below (and `run-ios.sh`) can
+  # `swift run swift-bao-codegen` against the same package graph the
+  # SPM plugin uses.
   JsBaoClient:
     url: https://github.com/Primitive-Labs/swift-client.git
     branch: alpha
@@ -35,10 +36,56 @@ targets:
           # xcodegen treats it as a resource and bundles it into the
           # .app — harmless but wasteful.
           - "**/Models/Generated/README.md"
+      # A BUILD PRODUCT, not a tracked file: generated from the selected
+      # Primitive environment in .primitive/config.json by the pre-build phase
+      # below (#2873). The path is non-optional to xcodegen, which is why
+      # scripts/regenerate-project.sh generates it before running xcodegen.
       - path: primitive.json
         buildPhase: resources
       - path: Assets.xcassets
         buildPhase: resources
+    # `swift build` regenerates `Models/Generated/` through the SwiftPM
+    # codegen plugin, but the Xcode target compiles the source list in
+    # `.pbxproj`, where no plugin runs. Without this phase, Xcode's Run
+    # button, a bare `xcodebuild` and CI all compiled whatever structs the
+    # last `./run-ios.sh` happened to leave behind (#2886).
+    #
+    # `models.toml` in, a stamp out: with both declared, Xcode's dependency
+    # analysis skips the phase entirely while the schema is untouched, so a
+    # normal incremental build pays nothing for it.
+    preBuildScripts:
+      - name: Generate models from models.toml
+        basedOnDependencyAnalysis: true
+        inputFiles: [$(SRCROOT)/Sources/PrimitiveAppTemplate/Models/models.toml]
+        outputFiles: [$(DERIVED_FILE_DIR)/models-codegen.stamp]
+        script: bash "$SRCROOT/scripts/generate-models.sh" --verify-project
+      # Re-resolve primitive.json on EVERY build, before Copy Bundle Resources
+      # runs. Building straight from Xcode (Run, Profile, Archive) must pick up
+      # the current `primitive env use` selection — a phase that could be
+      # skipped would let a build ship the environment a previous one resolved.
+      #
+      # The declared inputs/outputs are what let this run inside Xcode's user
+      # script sandbox: a phase may read its declared inputs and write its
+      # declared outputs. The template therefore leaves script sandboxing at
+      # Xcode's default and never disables it — turning it off in every
+      # scaffolded app to save a build-time file write would be a bad trade,
+      # especially in a template whose entitlements deliberately turn app
+      # sandboxing ON. A static test pins that the setting never appears here.
+      #
+      # `basedOnDependencyAnalysis: false` is about always running, not about
+      # incrementality: the declared I/O exists for sandbox access.
+      #
+      # The resolver script itself is an input: `bash <script>` READS it out of
+      # the source tree, which the sandbox denies unless it is declared.
+      - name: Resolve Primitive environment
+        script: bash "$SRCROOT/scripts/resolve-primitive-config.sh"
+        basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(SRCROOT)/scripts/resolve-primitive-config.sh
+          - $(SRCROOT)/.primitive/config.json
+          - $(SRCROOT)/.primitive/local.json
+        outputFiles:
+          - $(SRCROOT)/primitive.json
     entitlements:
       path: PrimitiveAppTemplate.entitlements
       properties:

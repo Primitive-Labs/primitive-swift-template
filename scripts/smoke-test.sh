@@ -73,6 +73,18 @@ LAUNCH_OBSERVATION_SECS="${PRIMITIVE_SMOKE_OBSERVE_SECS:-15}"
 TEST_EMAIL="${PRIMITIVE_SMOKE_TEST_EMAIL:-}"
 SUCCESS_ID="${PRIMITIVE_SMOKE_SUCCESS_ID:-primitive.template.home}"
 
+# `scripts/setup-idb.sh` installs the fb-idb client into a shared venv rather
+# than editing shell profiles, so find it here instead of asking for a PATH
+# export (#2881). The venv is used only when the ambient client is missing or
+# unrunnable: a working `idb` on PATH is never shadowed, while a broken one
+# (fb-idb under Python 3.13/3.14) no longer wins over a good venv client.
+IDB_VENV="${PRIMITIVE_IDB_VENV:-$HOME/.local/share/primitive/idb-venv}"
+if [ -x "$IDB_VENV/bin/idb" ] \
+   && ! { command -v idb >/dev/null 2>&1 && idb --help >/dev/null 2>&1; }; then
+    PATH="$IDB_VENV/bin:$PATH"
+    export PATH
+fi
+
 # idb companion state (set by start_idb_companion, torn down on exit).
 IDB_TARGET=""
 IDB_PORT=""
@@ -158,13 +170,12 @@ for dl in d['devices'].values():
 build_for_simulator() {
     local udid="$1"
     APP_PATH=""
-    log "Running swift-bao-codegen..."
-    local gen_dir="Sources/PrimitiveAppTemplate/Models/Generated"
-    local schema_toml="Sources/PrimitiveAppTemplate/Models/models.toml"
-    mkdir -p "$gen_dir"
-    swift run --package-path . swift-bao-codegen \
-        --input  "$schema_toml" \
-        --output "$gen_dir" >/dev/null
+    # Same Xcode build path as run-ios.sh: the SPM plugin never fires on it, so
+    # both codegens have to run by hand. Through the shared entry point, so
+    # this path cannot regenerate the models while compiling stale workflow
+    # factories — the #2895 bug in miniature. See scripts/codegen.sh.
+    log "Running codegen..."
+    bash scripts/codegen.sh >/dev/null
 
     # Regenerate the project so the sources codegen just wrote are in it, then
     # re-copy the app's package pin into the container that regeneration
@@ -437,21 +448,23 @@ EOF
             fail "ui_signin requires idb (the fb-idb client) on PATH."
         fi
         cat >&2 <<'EOF'
-[smoke-test]   Install both:
-[smoke-test]     brew install facebook/fb/idb-companion
-[smoke-test]     python3.12 -m venv idbenv && ./idbenv/bin/pip install fb-idb
-[smoke-test]     export PATH="$PWD/idbenv/bin:$PATH"   # so `idb` is on PATH
+[smoke-test]   Install both with one command:
+[smoke-test]     bash scripts/setup-idb.sh
+[smoke-test]   It installs idb_companion (Homebrew) and the fb-idb client into a
+[smoke-test]   Python 3.12 venv, and this smoke test finds that client on its own —
+[smoke-test]   no PATH export needed. Re-running it on a set-up machine is a no-op.
 [smoke-test]   Note: fb-idb needs Python 3.12 — it breaks on 3.14 (asyncio.get_event_loop
-[smoke-test]   was removed). Use a 3.12 venv as shown above.
+[smoke-test]   was removed), which is why the venv exists.
 EOF
         ok=0
     elif ! idb --help >/dev/null 2>&1; then
         fail "idb is installed but not runnable — likely the Python 3.14 fb-idb breakage."
         cat >&2 <<'EOF'
 [smoke-test]   fb-idb depends on asyncio.get_event_loop, removed in Python 3.14.
-[smoke-test]   Reinstall it into a Python 3.12 venv:
-[smoke-test]     python3.12 -m venv idbenv && ./idbenv/bin/pip install fb-idb
-[smoke-test]     export PATH="$PWD/idbenv/bin:$PATH"
+[smoke-test]   Reinstall it into a Python 3.12 venv with:
+[smoke-test]     bash scripts/setup-idb.sh
+[smoke-test]   (that idb is ahead of the venv client on PATH; remove or fix it, or run
+[smoke-test]   the venv's own binary at ~/.local/share/primitive/idb-venv/bin/idb.)
 EOF
         ok=0
     fi

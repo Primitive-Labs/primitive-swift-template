@@ -5,6 +5,9 @@
 #   ./run-ios.sh                build & run on simulator
 #   ./run-ios.sh --device       build & run on first paired iPhone
 #   ./run-ios.sh --verbose      stream all process logs (simulator only)
+#   ./run-ios.sh --primitive-env alpha
+#                               build against a named Primitive environment
+#                               instead of the one `primitive env use` selected
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -43,25 +46,35 @@ while [ $# -gt 0 ]; do
             SIM_TARGET="$2"; shift 2 ;;
         --sim=*)
             SIM_TARGET="${1#--sim=}"; shift ;;
-        *) echo "Unknown argument: $1"; echo "Usage: $0 [--device] [--verbose] [--sim <name-or-udid>]"; exit 1 ;;
+        # Which Primitive environment (backend/app) this build resolves.
+        # Exported so regenerate-project.sh's resolve step sees it (#2873).
+        --primitive-env)
+            if [ -z "${2:-}" ]; then
+                echo "--primitive-env requires an environment name" >&2
+                exit 1
+            fi
+            export PRIMITIVE_ENV="$2"; shift 2 ;;
+        --primitive-env=*)
+            export PRIMITIVE_ENV="${1#--primitive-env=}"; shift ;;
+        *) echo "Unknown argument: $1"; echo "Usage: $0 [--device] [--verbose] [--sim <name-or-udid>] [--primitive-env <name>]"; exit 1 ;;
     esac
 done
 
 # ────────────────────────────────────────────────────────────────────────────
-# Model codegen (Xcode build path)
+# Codegen (Xcode build path)
 # ────────────────────────────────────────────────────────────────────────────
-# `swift build` runs `JsBaoCodegenPlugin` automatically. The Xcode app
-# target compiles its own source list from `.pbxproj` though, so the
-# SPM plugin never fires on the iOS path — run the codegen tool by hand
-# here, writing into a checked-out `Generated/` directory that xcodegen
-# picks up below.
-GEN_DIR="Sources/PrimitiveAppTemplate/Models/Generated"
-SCHEMA_TOML="Sources/PrimitiveAppTemplate/Models/models.toml"
-mkdir -p "$GEN_DIR"
-echo "Running swift-bao-codegen..."
-swift run --package-path . swift-bao-codegen \
-    --input  "$SCHEMA_TOML" \
-    --output "$GEN_DIR"
+# `swift build` runs `JsBaoCodegenPlugin` automatically for the models. The
+# Xcode app target compiles its own source list from `.pbxproj` though, so the
+# SPM plugin never fires on the iOS path — and nothing ever regenerated the
+# workflow factories on any path. The shared entry point runs both, writing
+# into checked-out `Generated/` directories that xcodegen picks up below.
+#
+# The app target also runs the model half as a pre-build phase (#2886), so a
+# build started from Xcode or a bare `xcodebuild` is just as fresh. Running it
+# here too is what lets a NEWLY added model reach the project: xcodegen below
+# needs the file on disk to list it. That is also why this path leaves
+# `--verify-project` off — the regeneration it would ask for is the next line.
+bash scripts/codegen.sh
 
 # Regenerate the xcodeproj from project.yml so that newly added source
 # files (including freshly-codegen'd `Generated/*.swift`) get picked up, and

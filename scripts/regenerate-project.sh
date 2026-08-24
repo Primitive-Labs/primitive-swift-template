@@ -37,6 +37,14 @@ set -euo pipefail
 
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# primitive.json is a build product generated from the selected Primitive
+# environment (#2873). It has to exist BEFORE xcodegen runs: project.yml
+# declares it as a non-optional resource path, so a missing file is a project
+# generation error rather than a build-time one. Every caller of this script —
+# run-ios.sh, archive.sh, smoke-test.sh, the fastlane lanes — is covered by
+# doing it here, once. Progress goes to stderr, so stdout stays empty.
+bash scripts/resolve-primitive-config.sh
+
 if ! command -v xcodegen >/dev/null 2>&1; then
     echo "Error: xcodegen is not installed, and the Xcode project is generated from project.yml." >&2
     echo "  Install it with: brew install xcodegen" >&2

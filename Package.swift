@@ -25,10 +25,11 @@ let package = Package(
                 .product(name: "PrimitiveApp", package: "swift-primitive-app"),
             ],
             path: "Sources/PrimitiveAppTemplate",
-            // The Xcode build path (`run-ios.sh`) runs `swift-bao-codegen`
-            // by hand and writes into `Models/Generated/` so xcodegen
-            // can scan it into the .pbxproj. The SPM plugin emits its
-            // own copies into the plugin work dir on `swift build`.
+            // The Xcode build path runs `swift-bao-codegen` itself — from
+            // the target's pre-build phase, and from `run-ios.sh` before
+            // it regenerates the project — writing into `Models/Generated/`
+            // so xcodegen can scan it into the .pbxproj. The SPM plugin
+            // emits its own copies into the plugin work dir on `swift build`.
             // Exclude the manual-output dir from SPM's view so the two
             // producers don't collide.
             exclude: ["Models/Generated"],

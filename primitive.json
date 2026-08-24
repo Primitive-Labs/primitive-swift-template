@@ -1,5 +1,7 @@
 {
-  "appId": "__PRIMITIVE_APP_ID__",
-  "appName": "__PRIMITIVE_APP_NAME__",
-  "serverUrl": "__PRIMITIVE_SERVER_URL__"
+  "_generated": "by scripts/resolve-primitive-config.sh \u2014 do not edit",
+  "primitiveEnv": "template-build",
+  "appId": "app_template_build_fixture",
+  "serverUrl": "https://primitiveapi.com",
+  "appName": "Primitive Template App"
 }
