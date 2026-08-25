@@ -28,11 +28,17 @@
 # ── the Xcode sandbox ────────────────────────────────────────────────────────
 # Xcode's user-script sandbox permits a phase to read the files it declared as
 # inputs and write the ones it declared as outputs — nothing else. project.yml
-# declares $(SRCROOT)/.primitive/config.json, $(SRCROOT)/.primitive/local.json
-# and $(SRCROOT)/primitive.json, so inside that context this script reads ONLY
+# declares the project config, this machine's selection beside it, and
+# $(SRCROOT)/primitive.json, so inside that context this script reads ONLY
 # those and deliberately ignores PRIMITIVE_PROJECT_CONFIG (whose target is by
 # definition undeclared). The shipped template never sets
 # ENABLE_USER_SCRIPT_SANDBOXING.
+#
+# The declared config is $(SRCROOT)/.primitive/config.json in a standalone app,
+# and an ancestor's when this client is one of several in one Primitive app —
+# so the Xcode path walks up the same way the shell path does. Undeclared
+# ancestors simply are not readable inside the sandbox, so the walk finds the
+# declared file and nothing else.
 #
 # Usage:
 #   bash scripts/resolve-primitive-config.sh [--primitive-env <name>]
@@ -85,19 +91,30 @@ OUTPUT="$APP_ROOT/primitive.json"
 CONFIG_PATH=""
 if [ "$IN_XCODE" = "1" ]; then
     # Declared inputs only. PRIMITIVE_PROJECT_CONFIG is deliberately not read.
-    if [ -f "$APP_ROOT/.primitive/config.json" ]; then
-        CONFIG_PATH="$APP_ROOT/.primitive/config.json"
-    elif [ -f "$OUTPUT" ]; then
-        # This is how a repo gate builds the template tree: the config-less
-        # tree already had primitive.json generated (unsandboxed) by
-        # regenerate-project.sh from a fixture. Reaching for that fixture here
-        # would be an undeclared read.
-        echo "[primitive-config] No .primitive/config.json under \$SRCROOT; keeping the" >&2
-        echo "[primitive-config] pre-generated primitive.json. Skipping resolution." >&2
-        exit 0
-    else
+    # The walk covers the app that owns several clients, whose config sits
+    # above this one; the phase declares whichever file it lands on.
+    dir="$APP_ROOT"
+    while :; do
+        if [ -f "$dir/.primitive/config.json" ]; then
+            CONFIG_PATH="$dir/.primitive/config.json"
+            break
+        fi
+        parent="$(dirname "$dir")"
+        [ "$parent" = "$dir" ] && break
+        dir="$parent"
+    done
+    if [ -z "$CONFIG_PATH" ]; then
+        if [ -f "$OUTPUT" ]; then
+            # This is how a repo gate builds the template tree: the config-less
+            # tree already had primitive.json generated (unsandboxed) by
+            # regenerate-project.sh from a fixture. Reaching for that fixture
+            # here would be an undeclared read.
+            echo "[primitive-config] No readable .primitive/config.json; keeping the" >&2
+            echo "[primitive-config] pre-generated primitive.json. Skipping resolution." >&2
+            exit 0
+        fi
         fail "missing-config" \
-            "No .primitive/config.json under \$SRCROOT and no pre-generated primitive.json." \
+            "No .primitive/config.json under \$SRCROOT or a declared parent, and no pre-generated primitive.json." \
             "Run 'primitive init' in this project, or generate the file first:" \
             "  bash scripts/resolve-primitive-config.sh"
     fi

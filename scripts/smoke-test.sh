@@ -411,7 +411,7 @@ print('  bug_type:', header.get('bug_type',''))
 # (never a silent green skip — this scenario is opt-in, so if you ask for
 # it and it can't run, that's an error). Checks, in order: the test email,
 # idb + companion presence and runnability, and the app's server settings
-# (test-email whitelist, otpEnabled, and a signup mode that admits the
+# (test-email whitelist, emailSignInEnabled, and a signup mode that admits the
 # address).
 preflight_ui_signin() {
     local ok=1
@@ -539,8 +539,12 @@ invited_ack = os.environ['SMOKE_INVITED_ACK']
 bases = s.get('testAccountBaseEmails') or []
 if base not in bases:
     print('base address ' + base + ' is not in testAccountBaseEmails ' + json.dumps(bases)); sys.exit(0)
-if not s.get('otpEnabled'):
-    print('otpEnabled is false — enable OTP so the email button prompts for a code, not a magic link'); sys.exit(0)
+email_sign_in = s.get('emailSignInEnabled')
+if email_sign_in is None:
+    # A server that predates #2884 reports the pair this setting replaced.
+    email_sign_in = s.get('otpEnabled') is not False or s.get('magicLinkEnabled') is not False
+if not email_sign_in:
+    print('emailSignInEnabled is false — enable email sign-in so the email button sends the code'); sys.exit(0)
 mode = s.get('mode') or '(unset)'
 if mode == 'domain':
     domain = email.rpartition('@')[2].lower()
@@ -573,7 +577,7 @@ print('')
 [smoke-test]     mode = "public"
 [smoke-test]     testAccountBaseEmails = ["$base_email"]
 [smoke-test]     [auth]
-[smoke-test]     otpEnabled = true
+[smoke-test]     emailSignInEnabled = true
 [smoke-test]   then:  primitive config push --only app
 [smoke-test]   A freshly scaffolded app defaults to mode = "invite-only", which rejects
 [smoke-test]   an uninvited address at OTP request — the +primitivetest bypass runs
@@ -634,7 +638,7 @@ scenario_ui_signin() {
 
     # 2. OTP screen — enter the fixed bypass code.
     if ! idb_wait_id "primitive.login.otpField" 30; then
-        fail "OTP entry did not appear (check the whitelist and otpEnabled)"; dump_ui_state "$udid" otp; return 1
+        fail "Code entry did not appear (check the whitelist and emailSignInEnabled)"; dump_ui_state "$udid" otp; return 1
     fi
     log "Entering OTP bypass code..."
     idb_tap_id "primitive.login.otpField" || { fail "could not tap OTP field"; dump_ui_state "$udid" otp-tap; return 1; }

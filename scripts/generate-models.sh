@@ -45,17 +45,49 @@ done
 
 # The app's source directory is whichever one holds the schema, so a renamed
 # app (`primitive init` scaffolds under your own name) needs no edit here.
+#
+# A `bao-codegen.json` beside the app's sources names a schema OUTSIDE the
+# target and replaces the scan — that is how one Primitive app with several
+# clients keeps a single `models.toml` at the repository root, shared with a
+# web client, without a copy or a symlink. Same file, same key, same resolution
+# the SwiftPM plugin uses (`{"input": "../../../models/models.toml"}`, resolved
+# against the app's source directory).
+APP_SOURCES=""
 SCHEMA_TOML=""
-for candidate in Sources/*/Models/models.toml; do
+for candidate in Sources/*/bao-codegen.json; do
     [ -f "$candidate" ] || continue
-    SCHEMA_TOML="$candidate"
+    APP_SOURCES="$(dirname "$candidate")"
+    CONFIGURED_INPUT="$(sed -n 's/.*"input"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$candidate" | head -1)"
+    if [ -z "$CONFIGURED_INPUT" ]; then
+        echo "error: $candidate has no \"input\" — remove the file to scan the target's own sources." >&2
+        exit 1
+    fi
+    case "$CONFIGURED_INPUT" in
+        /*) SCHEMA_TOML="$CONFIGURED_INPUT" ;;
+        *)  SCHEMA_TOML="$APP_SOURCES/$CONFIGURED_INPUT" ;;
+    esac
+    if [ ! -f "$SCHEMA_TOML" ]; then
+        echo "error: $candidate names $CONFIGURED_INPUT, which does not exist." >&2
+        exit 1
+    fi
     break
 done
+
 if [ -z "$SCHEMA_TOML" ]; then
-    echo "error: no models.toml found under Sources/<App>/Models/ — codegen has no schema to read." >&2
+    for candidate in Sources/*/Models/models.toml; do
+        [ -f "$candidate" ] || continue
+        SCHEMA_TOML="$candidate"
+        APP_SOURCES="$(dirname "$(dirname "$candidate")")"
+        break
+    done
+fi
+if [ -z "$SCHEMA_TOML" ]; then
+    echo "error: no models.toml found under Sources/<App>/Models/ (and no Sources/<App>/bao-codegen.json naming one) — codegen has no schema to read." >&2
     exit 1
 fi
-GEN_DIR="$(dirname "$SCHEMA_TOML")/Generated"
+# Always the app's own directory: the generated types belong to this target
+# even when the schema they come from lives outside it.
+GEN_DIR="$APP_SOURCES/Models/Generated"
 mkdir -p "$GEN_DIR"
 
 # Xcode exports the target's SDK into every script phase. `swift run` builds
@@ -98,21 +130,62 @@ if [ "$VERIFY_PROJECT" = true ]; then
             }
         ' "$PBXPROJ")"
 
-        # What the project's `Generated` group still lists. Codegen has already
-        # swept the file of a model dropped from the schema, so a name here
-        # with nothing on disk is an entry only xcodegen can drop.
-        LISTED="$(awk '
-            /\/\* Generated \*\/ = \{/ { inside = 1; block = ""; children = ""; next }
-            inside {
-                block = block $0
-                if ($0 ~ /^[[:space:]]*\};/) {
-                    if (block ~ /isa = PBXGroup;/ && block ~ /path = Generated;/) print children
-                    inside = 0
-                    next
+        # What THIS codegen's own group still lists. Codegen has already swept
+        # the file of a model dropped from the schema, so a name here with
+        # nothing on disk is an entry only xcodegen can drop.
+        #
+        # The group is identified by where it sits in the group tree, not by
+        # its name: an app has more than one group named `Generated` the
+        # moment it has synced workflows, because `scripts/codegen.sh` writes
+        # the workflow factories to `Workflows/Generated` and xcodegen lists
+        # that group too. Matching the name alone read every workflow factory
+        # as a model the schema no longer declares, and failed the build of
+        # any app that had run workflow codegen (#2930).
+        #
+        # So: parse every `PBXGroup`, resolve each one's path by walking its
+        # ancestors (a group contributes its own `path`, if it has one — a
+        # `name`-only group is a folder that exists in the navigator alone),
+        # and take the one that resolves to `$GEN_DIR`. A project with no such
+        # group lists nothing, which reports no obsolete files; the added-model
+        # half of the check reads the build phases and is unaffected.
+        LISTED="$(awk -v want="$GEN_DIR" '
+            function unquote(value) { gsub(/^"|"$/, "", value); return value }
+            # Where a group sits: its ancestors, outermost first. Groups form a
+            # tree, so the walk terminates; the cap is belt and braces.
+            function resolve(id,   path, hops) {
+                path = ""
+                for (hops = 0; id != "" && hops < 64; hops++) {
+                    if (id in group_path && group_path[id] != "") {
+                        path = (path == "" ? group_path[id] : group_path[id] "/" path)
+                    }
+                    id = parent[id]
                 }
-                if (match($0, /\/\* [^*]+\.swift \*\/,/)) {
-                    children = children " " substr($0, RSTART + 3, RLENGTH - 7)
-                }
+                return path
+            }
+            # `<id> /* comment */ = {` opens an object. A one-line object (every
+            # PBXFileReference is one) carries its body after the brace and is
+            # skipped: only groups are read here.
+            /=[[:space:]]*\{[[:space:]]*$/ { current = unquote($1); next }
+            /^[[:space:]]*\};/ { current = ""; next }
+            current == "" { next }
+            /^[[:space:]]*isa = PBXGroup;/ { is_group[current] = 1; next }
+            /^[[:space:]]*path = / {
+                value = $0
+                sub(/^[[:space:]]*path = /, "", value)
+                sub(/;[[:space:]]*$/, "", value)
+                group_path[current] = unquote(value)
+                next
+            }
+            # A child entry: `<id> /* name */,`.
+            /^[[:space:]]*[^[:space:]]+ \/\* .* \*\/,[[:space:]]*$/ {
+                parent[unquote($1)] = current
+                name = $0
+                sub(/^[^\/]*\/\* /, "", name)
+                sub(/ \*\/,[[:space:]]*$/, "", name)
+                if (name ~ /\.swift$/) children[current] = children[current] " " name
+            }
+            END {
+                for (id in is_group) if (resolve(id) == want) print children[id]
             }
         ' "$PBXPROJ")"
 

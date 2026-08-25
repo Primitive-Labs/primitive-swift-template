@@ -11,7 +11,7 @@ Build and run the template (`./run.sh` for macOS, `./run-ios.sh` for iOS) and yo
 - A real Primitive app with email login (magic link + OTP) and optional Google OAuth
 - A WebSocket-connected `JsBaoClient` available everywhere via `@EnvironmentObject`
 - A per-user singleton document, resolved-or-created on connect (the `TemplateAppState` pattern)
-- Model codegen wired up: define models in `Models/models.toml` and `swift build` emits typed Swift records
+- Model codegen wired up: define models in the app's `models.toml` and `swift build` emits typed Swift records
 - Two tabs (Home, Profile), two error channels (fatal alert + transient toast), and deep-link routing hooks
 
 You wrote zero auth, connection, or document plumbing. The library does all of it.
@@ -29,7 +29,7 @@ primitive-swift-template/
     ├── PrimitiveAppTemplateApp.swift   ← @main entry: creates TemplateAppState, injects it
     ├── TemplateAppState.swift          ← PrimitiveAppState subclass: singleton doc + error channels
     ├── Models/
-    │   ├── models.toml                 ← Your model schemas (ships with a commented example)
+    │   ├── models.toml                 ← Your model schemas (ships with a commented example; absent when the app's schema is shared — see `bao-codegen.json`)
     │   └── Generated/                  ← Codegen output — never edit by hand
     └── Views/
         ├── ContentView.swift           ← Auth gate + tab view + Home placeholder
@@ -73,7 +73,7 @@ Heads-up: the idb smoke test asserts the `primitive.template.home` accessibility
 
 Codegen is already wired on every build path: the `JsBaoCodegenPlugin` runs on `swift build`, and the Xcode targets run `scripts/generate-models.sh` from a pre-build phase, so Xcode's Run button and a bare `xcodebuild` regenerate too. `models.toml` is that phase's declared input, so builds that don't touch the schema skip it. To add a model:
 
-1. Define it in `Sources/PrimitiveAppTemplate/Models/models.toml` — the file ships with a commented example showing the full shape (id field, typed scalars, the `required` constraint, class-name override).
+1. Define it in the app's schema — `Sources/PrimitiveAppTemplate/Models/models.toml` here, or the file `Sources/PrimitiveAppTemplate/bao-codegen.json` names (`{"input": "../../../models/models.toml"}`) when this client shares one Primitive app with another. One schema per app, never a copy: its TOML keys are the wire field names. The shipped file carries a commented example showing the full shape (id field, typed scalars, the `required` constraint, class-name override).
 2. Run `swift build` — a typed record struct is emitted into `Models/Generated/` (never edit those files; hand-written companions like `ItemRecord+Extensions.swift` go in `Models/`, outside `Generated/`).
 3. Load it in `TemplateAppState.onDocumentOpened` (e.g. `items = ItemRecord.query()`) and write with `try ItemRecord(...).save(in: documentId)`.
 
