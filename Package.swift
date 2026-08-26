@@ -1,4 +1,9 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.1
+//
+// 6.1, not 6.0 (#2966): SwiftPM compiles JsBaoCodegenPlugin against the
+// consuming package's tools version, and the plugin uses
+// `Target.directoryURL`, which PackagePlugin gates on 6.1. A 6.0 manifest
+// here fails the plugin build with "'directoryURL' is unavailable".
 import PackageDescription
 
 let package = Package(

@@ -8,10 +8,16 @@
 # quits unexpectedly before the first frame renders.
 #
 # How it works: each scenario builds (if needed) → installs → launches
-# the app on a booted simulator, then asserts something about the
-# post-launch state. The launch-and-survive scenario just verifies the
-# process is alive after a short window and no new crash report appeared
-# in `~/Library/Logs/DiagnosticReports/`.
+# the app on a simulator dedicated to this app, then asserts something
+# about the post-launch state. The launch-and-survive scenario just
+# verifies the process is alive after a short window and no new crash
+# report appeared in `~/Library/Logs/DiagnosticReports/`.
+#
+# The device is named after the app's bundle id and created on first use,
+# so two apps built from this template can smoke-test side by side on one
+# machine without landing on each other's simulator (#2971). Override the
+# name with PRIMITIVE_SMOKE_SIM and the device type it is created from with
+# PRIMITIVE_SMOKE_SIM_BASE.
 #
 # Usage:
 #   ./scripts/smoke-test.sh                  # run the default scenarios
@@ -50,7 +56,6 @@ cd "$(dirname "$0")/.."
 PROJECT="PrimitiveAppTemplate.xcodeproj"
 SCHEME="PrimitiveAppTemplate_iOS"
 APP_NAME="PrimitiveAppTemplate"
-SIM_NAME="${PRIMITIVE_SMOKE_SIM:-iPhone 17 Pro}"
 LAUNCH_OBSERVATION_SECS="${PRIMITIVE_SMOKE_OBSERVE_SECS:-15}"
 
 # ui_signin knobs.
@@ -99,6 +104,20 @@ read_yml_value() {
 BUNDLE_ID="$(read_yml_value PRODUCT_BUNDLE_IDENTIFIER)"
 BUNDLE_ID="${BUNDLE_ID:-com.primitivelabs.PrimitiveAppTemplate}"
 
+# The device a run targets: one dedicated to THIS app, named after its bundle
+# id. The run used to adopt whichever simulator happened to be booted, so two
+# apps scaffolded from this template on one machine shared a device — app B
+# installed onto app A's simulator and every assertion read app A's UI (#2971).
+# The bundle id is the identity two apps on one machine can never share, it is
+# already resolved above, and it reads clearly in the Simulator's device list.
+# Set PRIMITIVE_SMOKE_SIM to name the device yourself (e.g. to share one device
+# between two checkouts of the same app on purpose).
+SIM_NAME="${PRIMITIVE_SMOKE_SIM:-Smoke — ${BUNDLE_ID}}"
+# The device type the dedicated simulator is created from on first use. Set
+# PRIMITIVE_SMOKE_SIM_BASE when this Xcode has no such device type (see
+# `xcrun simctl list devicetypes`) or to smoke-test on another model.
+SIM_BASE_DEVICE="${PRIMITIVE_SMOKE_SIM_BASE:-iPhone 17 Pro}"
+
 # Every runnable scenario (drives `--list`). Each name has a matching
 # `scenario_<name>` function below.
 AVAILABLE_SCENARIOS=(launch_survive ui_signin)
@@ -114,46 +133,63 @@ log()  { printf '[smoke-test] %s\n' "$*" >&2; }
 fail() { printf '[smoke-test] FAIL: %s\n' "$*" >&2; return 1; }
 pass() { printf '[smoke-test] PASS: %s\n' "$*" >&2; }
 
-# Pick a booted simulator, or boot the configured one. Echoes the UDID.
-boot_simulator() {
-    local udid
-    udid=$(xcrun simctl list devices booted -j | python3 -c "
-import json,sys
-d=json.load(sys.stdin)
-for dl in d['devices'].values():
-    for dd in dl:
-        if dd['state']=='Booted':
-            print(dd['udid']); break
-    else:
-        continue
+# Echo "<udid> <state>" for the device named $SIM_NAME, or nothing when this
+# machine has no such device. A Booted match wins, so a name that exists on
+# more than one runtime resolves to the one already running. The name is passed
+# through the environment rather than interpolated into the Python source: it
+# carries a bundle id and whatever PRIMITIVE_SMOKE_SIM was set to.
+sim_by_name() {
+    xcrun simctl list devices available -j \
+        | SMOKE_SIM_NAME="$SIM_NAME" python3 -c "
+import json, os, sys
+name = os.environ['SMOKE_SIM_NAME']
+devices = json.load(sys.stdin)['devices'].values()
+matches = [d for dl in devices for d in dl if d.get('name') == name]
+for d in sorted(matches, key=lambda d: d.get('state') != 'Booted'):
+    print(d['udid'], d.get('state', ''))
     break
-")
-    if [ -n "${udid:-}" ]; then
-        echo "$udid"
-        return 0
-    fi
-    log "No booted simulator; booting '$SIM_NAME'..."
-    udid=$(xcrun simctl list devices available -j | python3 -c "
-import json,sys
-name='$SIM_NAME'
-d=json.load(sys.stdin)
-for dl in d['devices'].values():
-    for dd in dl:
-        if dd['name']==name:
-            print(dd['udid']); sys.exit(0)
-" || true)
+" 2>/dev/null
+}
+
+# Echo the UDID of this app's dedicated simulator, creating it on first use and
+# booting it when it isn't already running. Selection is by name alone, so
+# another app's booted device is never adopted and re-runs stay on the same
+# device (#2971).
+boot_simulator() {
+    local udid state
+    read -r udid state <<<"$(sim_by_name)"
     if [ -z "${udid:-}" ]; then
-        fail "Simulator '$SIM_NAME' not available. Set PRIMITIVE_SMOKE_SIM or install via Xcode."
-        return 1
+        log "Creating simulator '$SIM_NAME' ($SIM_BASE_DEVICE)..."
+        # Checked explicitly for the same reason the boot below is: a failed
+        # create in a command substitution does not stop the run, and an empty
+        # UDID reaches `simctl install`/`launch` as "the booted device" — the
+        # wrong-device failure this whole function exists to prevent (#2971).
+        local create_err create_status=0
+        create_err="$(mktemp)"
+        udid=$(xcrun simctl create "$SIM_NAME" "$SIM_BASE_DEVICE" 2>"$create_err") \
+            || create_status=$?
+        if [ "$create_status" != "0" ] || [ -z "${udid:-}" ]; then
+            fail "Could not create simulator '$SIM_NAME' from device type '$SIM_BASE_DEVICE'."
+            sed 's/^/[smoke-test]   /' "$create_err" >&2
+            log "  Set PRIMITIVE_SMOKE_SIM_BASE to a device type this Xcode has"
+            log "  (see: xcrun simctl list devicetypes)."
+            rm -f "$create_err"
+            return 1
+        fi
+        rm -f "$create_err"
+        state="Shutdown"
     fi
-    # Checked explicitly: this function runs inside a command substitution,
-    # which does not inherit `set -e`, so a failed boot would otherwise fall
-    # through and echo a UDID nothing is running on.
-    if ! xcrun simctl boot "$udid"; then
-        fail "Could not boot simulator '$SIM_NAME' ($udid)."
-        return 1
+    if [ "$state" != "Booted" ]; then
+        log "Booting '$SIM_NAME' ($udid)..."
+        # Checked explicitly: this function runs inside a command substitution,
+        # which does not inherit `set -e`, so a failed boot would otherwise fall
+        # through and echo a UDID nothing is running on.
+        if ! xcrun simctl boot "$udid"; then
+            fail "Could not boot simulator '$SIM_NAME' ($udid)."
+            return 1
+        fi
+        open -ga Simulator
     fi
-    open -ga Simulator
     echo "$udid"
 }
 

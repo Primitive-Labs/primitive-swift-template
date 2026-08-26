@@ -8,7 +8,7 @@ If you've never used the library, read the [PrimitiveApp library docs](https://g
 
 Build and run the template (`./run.sh` for macOS, `./run-ios.sh` for iOS) and you immediately have:
 
-- A real Primitive app with email login (magic link + OTP) and optional Google OAuth
+- A real Primitive app with email login (a 6-digit code out of the box; the emailed sign-in link is a two-line opt-in — see AGENTS.md, "Email sign-in links") and optional Google OAuth
 - A WebSocket-connected `JsBaoClient` available everywhere via `@EnvironmentObject`
 - A per-user singleton document, resolved-or-created on connect (the `TemplateAppState` pattern)
 - Model codegen wired up: define models in the app's `models.toml` and `swift build` emits typed Swift records
@@ -117,6 +117,8 @@ Because this is SPM-based, **adding a new `.swift` file is just creating it on d
 - `bash scripts/smoke-test.sh ui_signin` — an [idb](https://fbidb.io/)-driven test that signs in end-to-end and asserts the post-login screen renders. This one needs idb installed and a `+primitivetest` account. Install idb with `bash scripts/setup-idb.sh` — one idempotent command that sets up the Homebrew companion and the `fb-idb` client in a Python 3.12 venv, which the smoke test then finds on its own. Run `bash scripts/smoke-test.sh --list` to see both scenarios, and see the DevTools agent guide (`primitive guides get devtools --language swift`) for what the setup does and how idb complements the Debug Inspector.
 
 `ui_signin` is opt-in, so the default run never requires idb.
+
+Both scenarios run on a simulator dedicated to this app — `Smoke — <bundle id>`, created on first use — rather than whichever device is booted, so two apps built from this template can smoke-test side by side on one machine. Set `PRIMITIVE_SMOKE_SIM` to pick the device by name yourself, or `PRIMITIVE_SMOKE_SIM_BASE` (default `iPhone 17 Pro`) to change the device type it is created from.
 
 ## Where to look next
 

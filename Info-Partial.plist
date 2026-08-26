@@ -13,5 +13,49 @@
 	<array>
 		<string>_primitive-inspector._tcp</string>
 	</array>
+	<!--
+	  This app's own URL scheme, under the CFBundleURLName PrimitiveAuth that
+	  PrimitiveAuthManager reads its callback scheme from. `primitive init`
+	  stamps an app-unique scheme in place of `primitiveapp` — every app
+	  scaffolded from this template would otherwise register the same one, and
+	  iOS picks arbitrarily between two apps claiming a scheme.
+
+	  Sign-in email: CODE-ONLY BY DEFAULT, and that works with no configuration
+	  at all — the manager sends no redirect target, so the server never
+	  consults the allow-list. Turning the emailed LINK on takes two steps:
+
+	    1. Merge "<scheme>://auth/magic-link" into the existing
+	       [auth].emailRedirectUris array in your app's config/app.toml and
+	       push the app settings with `primitive config push` (its option flag
+	       spells a double hyphen, which an XML comment cannot contain — the
+	       exact command is in the authentication guide).
+	    2. Set `authManager.sendsEmailSignInLink = true` before sign-in.
+
+	  What each missing piece looks like, so a half-wired app is diagnosable:
+	    - flag on, URI not allow-listed  → EVERY email request fails 400
+	                                       `Invalid redirect URI`
+	    - allow-listed, scheme not here  → the emailed link is a dead tap;
+	                                       nothing launches, nothing logs
+	    - registered, nothing routing it → the app opens and no one signs in
+	                                       (ContentView's .onOpenURL →
+	                                       routePlatformLink does the routing)
+
+	  A custom-scheme link only opens on a device that has this app installed:
+	  dead in the Simulator, dead cross-device, and most webmail clients will
+	  not render a non-http(s) href as a link. The code is the credential that
+	  always works. The same scheme carries the OAuth callback
+	  ("<scheme>://oauth/callback") when you use `startOAuth()`.
+	-->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>PrimitiveAuth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>primitiveapp</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

@@ -69,3 +69,16 @@ primitive guides get devtools --language swift
 ## Data-side patterns
 
 When adding models, queries, writes, or auth flows, fetch the matching guide first — e.g. `primitive guides get documents --language swift`. The guides are written against this same library.
+
+## Email sign-in links
+
+Email sign-in works out of the box and needs no app settings: `PrimitiveAuthManager` sends no redirect target, so the server emails a 6-digit code alone. That code is the credential that always works — including in the Simulator, where a custom-scheme link cannot open anything.
+
+To also send a LINK that opens this app, two things have to be true, and each missing piece fails differently:
+
+1. **Allow-list the URI.** Merge `<scheme>://auth/magic-link` into the existing `[auth].emailRedirectUris` array in the app's `config/app.toml` (run `primitive config pull --only app` first if that file isn't there yet), then `primitive config push --only app` — never a bare replacement array; `app.toml` is the whole app-settings truth on push. Missing → EVERY email sign-in request fails 400 `Invalid redirect URI`.
+2. **Set `authManager.sendsEmailSignInLink = true`** before requesting the email. Missing → the email is code-only (no error).
+
+The other two pieces this template already ships: the scheme is registered in `Info-Partial.plist` under the `PrimitiveAuth` URL type (`primitive init` stamps an app-unique one there, and the manager reads its `callbackScheme` from that same entry — an unregistered scheme makes the emailed link a dead tap), and `ContentView`'s `.onOpenURL` → `routePlatformLink` routes the incoming URL (unrouted → the app opens and nobody signs in). That scheme also carries the OAuth callback, `<scheme>://oauth/callback`, when you use `startOAuth()`.
+
+A custom-scheme link only opens on a device with the app installed, so it is dead cross-device and in the Simulator, and many webmail clients won't render a non-http(s) href as a link at all. Full checklist and symptoms: `primitive guides get authentication --language swift`.
