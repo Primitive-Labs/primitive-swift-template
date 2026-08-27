@@ -1,8 +1,8 @@
 # Schema for `swift-bao-codegen` — the build-time codegen tool that
 # emits one `<class_name>.swift` file per `[models.<name>]` block into
 # `Models/Generated/`. `swift build` runs the codegen automatically via
-# the SwiftPM `JsBaoCodegenPlugin`; the Xcode/iOS path runs it manually
-# from `run-ios.sh`.
+# the SwiftPM `JsBaoCodegenPlugin`; the Xcode/iOS targets run it from a
+# pre-build phase that takes this file as its input.
 #
 # The same TOML is loadable by `js-bao`'s `loadSchemaFromTomlString` so
 # any web/Node client speaking the same Primitive doc can read/write the
@@ -15,8 +15,12 @@
 # constraint (necessary for CRDT-backed fields since the CRDT layer
 # can't store nil), and the class-name override.
 #
-# After editing, on the SwiftPM path: `swift build` regenerates.
-# On the Xcode path: `./run-ios.sh` runs codegen then regens xcodeproj.
+# After editing, every build path regenerates: `swift build` through the
+# plugin, Xcode through the pre-build phase. A NEW model is also a new
+# file, which the Xcode project has to be told about, and `xcodegen` can
+# only list a file that exists — so run `./run-ios.sh`, which generates
+# and then regenerates the project, or the same pair by hand:
+# `bash scripts/codegen.sh && bash scripts/regenerate-project.sh`.
 # ----------------------------------------------------------------------
 
 # Example — copy, uncomment, and adapt. Snake_case field names are

@@ -196,14 +196,17 @@ When a detail view opens a document, subscribe to `.documentMetadataChanged`,
 gate on `action == "deleted"`, and pop the view on match:
 
 ```swift
+@Environment(\.dismiss) private var dismiss
 @State private var deletedSub: EventSubscription?
 
 .task {
-    deletedSub = appState.client?.events.on(.documentMetadataChanged) { [weak self] (ev: DocumentMetadataChangedEvent) in
-        Task { @MainActor in
-            guard let self, ev.action == "deleted", ev.documentId == self.documentId else { return }
-            self.dismiss()
-        }
+    // `observeOnMainActor`'s handler already runs on the main actor, so no
+    // `Task { @MainActor in … }` wrapper. A `View` is a struct, so capture the
+    // values the handler needs rather than `[weak self]`.
+    let documentId = self.documentId
+    deletedSub = appState.client?.observeOnMainActor(DocumentMetadataChangedEvent.self) { ev in
+        guard ev.action == "deleted", ev.documentId == documentId else { return }
+        dismiss()
     }
 }
 .onDisappear { deletedSub?.cancel() }

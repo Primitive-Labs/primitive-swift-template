@@ -11,6 +11,11 @@ EXECUTABLE="primitive-app-template"
 ASSETS_DIR="Assets.xcassets"
 BUILD_DIR=".build/app-bundle"
 
+# primitive.json is a build product resolved from the selected Primitive
+# environment (#2873), and it is copied into the bundle below — so generate it
+# before the bundle is assembled, not after.
+bash scripts/resolve-primitive-config.sh
+
 echo "Building $APP_NAME..."
 swift build
 

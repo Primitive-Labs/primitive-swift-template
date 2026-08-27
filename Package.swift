@@ -1,4 +1,9 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.1
+//
+// 6.1, not 6.0 (#2966): SwiftPM compiles JsBaoCodegenPlugin against the
+// consuming package's tools version, and the plugin uses
+// `Target.directoryURL`, which PackagePlugin gates on 6.1. A 6.0 manifest
+// here fails the plugin build with "'directoryURL' is unavailable".
 import PackageDescription
 
 let package = Package(
@@ -25,10 +30,11 @@ let package = Package(
                 .product(name: "PrimitiveApp", package: "swift-primitive-app"),
             ],
             path: "Sources/PrimitiveAppTemplate",
-            // The Xcode build path (`run-ios.sh`) runs `swift-bao-codegen`
-            // by hand and writes into `Models/Generated/` so xcodegen
-            // can scan it into the .pbxproj. The SPM plugin emits its
-            // own copies into the plugin work dir on `swift build`.
+            // The Xcode build path runs `swift-bao-codegen` itself — from
+            // the target's pre-build phase, and from `run-ios.sh` before
+            // it regenerates the project — writing into `Models/Generated/`
+            // so xcodegen can scan it into the .pbxproj. The SPM plugin
+            // emits its own copies into the plugin work dir on `swift build`.
             // Exclude the manual-output dir from SPM's view so the two
             // producers don't collide.
             exclude: ["Models/Generated"],
@@ -36,5 +42,9 @@ let package = Package(
                 .plugin(name: "JsBaoCodegenPlugin", package: "swift-client"),
             ]
         ),
-    ]
+    ],
+    // Swift 6 language mode for the whole package (#2310). Strict concurrency
+    // checking is `complete` and its diagnostics are hard errors, matching the
+    // JsBaoClient package this template builds on.
+    swiftLanguageModes: [.v6]
 )

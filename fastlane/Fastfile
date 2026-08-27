@@ -4,6 +4,20 @@ default_platform(:ios)
 # Shared helpers
 # ---------------------------------------------------------------------------
 
+# Run a shell command from the APP ROOT rather than from `fastlane/`.
+#
+# fastlane runs `sh(...)` with the working directory set to the fastlane
+# directory, so every command that touches an app file used to carry its own
+# `../` prefix — and one that forgot silently ran against the wrong directory
+# (#2535). Route every command through this helper instead and no command
+# string needs the prefix at all.
+#
+# Ruby file operations in this Fastfile (`File.read`, `File.write`) still run
+# with fastlane's working directory and keep their `../`.
+def sh_app_root(command)
+  sh("cd .. && (#{command})")
+end
+
 # Read a build setting (PRODUCT_BUNDLE_IDENTIFIER, DEVELOPMENT_TEAM,
 # MARKETING_VERSION, etc.) from project.yml. xcodegen is the source of truth
 # for this scaffolded app; the Xcode project is regenerated from it.
@@ -74,6 +88,19 @@ def current_version
   version = project_yml_value("MARKETING_VERSION") || "1.0"
   build = project_yml_value("CURRENT_PROJECT_VERSION") || "1"
   { version: version, build: build.to_i }
+end
+
+# ---------------------------------------------------------------------------
+# Every lane starts from a project regenerated out of project.yml
+# ---------------------------------------------------------------------------
+#
+# project.yml is the source of truth for the Xcode project, and xcodebuild —
+# plus `build_app`, which wraps it — resolves packages from Xcode's own pin
+# inside the .xcodeproj, which `swift package update` never touches. Without
+# this an upload can ship a stale project, or the revision Xcode last resolved
+# instead of the one the app is pinned to. See scripts/regenerate-project.sh.
+before_all do
+  sh_app_root("bash scripts/regenerate-project.sh")
 end
 
 # ---------------------------------------------------------------------------
@@ -177,14 +204,17 @@ platform :mac do
     name = project_yml_name
     v = current_version
 
-    dmg_path = "../.build/archives/#{name}-#{v[:version]}.dmg"
-    archive_path = "../.build/archives/#{name}-macOS.xcarchive"
-    export_path = "../.build/archives/dmg-export"
+    # Relative to the app root: every command below goes through sh_app_root,
+    # which steps up out of fastlane/ first. `File.write` is the exception —
+    # it is Ruby, so it still runs from fastlane/ and needs the `../`.
+    dmg_path = ".build/archives/#{name}-#{v[:version]}.dmg"
+    archive_path = ".build/archives/#{name}-macOS.xcarchive"
+    export_path = ".build/archives/dmg-export"
 
     UI.message("Archiving...")
-    sh(
+    sh_app_root(
       "xcodebuild archive " \
-      "-project ../#{name}.xcodeproj " \
+      "-project #{name}.xcodeproj " \
       "-scheme #{name}_macOS " \
       "-destination 'generic/platform=macOS' " \
       "-archivePath '#{archive_path}' " \
@@ -196,8 +226,8 @@ platform :mac do
     UI.success("Archive created")
 
     UI.message("Exporting with Developer ID...")
-    export_plist = "../.build/archives/ExportOptions-dmg.plist"
-    File.write(export_plist, <<~PLIST)
+    export_plist = ".build/archives/ExportOptions-dmg.plist"
+    File.write("../#{export_plist}", <<~PLIST)
       <?xml version="1.0" encoding="UTF-8"?>
       <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
       <plist version="1.0">
@@ -210,7 +240,7 @@ platform :mac do
       </plist>
     PLIST
 
-    sh(
+    sh_app_root(
       "xcodebuild -exportArchive " \
       "-archivePath '#{archive_path}' " \
       "-exportOptionsPlist '#{export_plist}' " \
@@ -223,8 +253,8 @@ platform :mac do
     app_path = "#{export_path}/#{name}.app"
 
     UI.message("Creating DMG...")
-    sh("rm -f '#{dmg_path}'")
-    sh(
+    sh_app_root("rm -f '#{dmg_path}'")
+    sh_app_root(
       "hdiutil create -volname '#{name}' " \
       "-srcfolder '#{app_path}' " \
       "-ov -format UDZO " \
@@ -234,7 +264,7 @@ platform :mac do
 
     UI.message("Submitting for notarization...")
     begin
-      sh("xcrun notarytool submit '#{dmg_path}' --keychain-profile 'primitive-notarytool' --wait")
+      sh_app_root("xcrun notarytool submit '#{dmg_path}' --keychain-profile 'primitive-notarytool' --wait")
     rescue
       UI.error("Notarization failed — keychain profile 'primitive-notarytool' may not be set up.")
       UI.message("")
@@ -252,7 +282,7 @@ platform :mac do
     # Apple CDN can take a few minutes to propagate notarization status.
     5.times do |i|
       begin
-        sh("xcrun stapler staple '#{dmg_path}'")
+        sh_app_root("xcrun stapler staple '#{dmg_path}'")
         break
       rescue
         raise if i == 4
@@ -293,7 +323,11 @@ lane :bump do |options|
   yml.gsub!(/CURRENT_PROJECT_VERSION:\s*"?[^"\n]+"?/, "CURRENT_PROJECT_VERSION: \"#{new_build}\"")
   File.write("../project.yml", yml)
 
-  sh("xcodegen generate --quiet 2>/dev/null || xcodegen generate")
+  # Regenerate the Xcode project from the spec we just rewrote, and re-copy the
+  # package pin into the container that regeneration rewrote. `before_all` ran
+  # the same pair before this lane started, which is too early to cover the
+  # version we just wrote into project.yml.
+  sh_app_root("bash scripts/regenerate-project.sh")
 
   UI.success("Version bumped: #{v[:version]} (#{v[:build]}) → #{new_version} (#{new_build})")
 end
@@ -316,7 +350,7 @@ lane :status do
 
   UI.message("")
   UI.message("Certificates:")
-  sh("security find-identity -v -p codesigning | grep -E '(Developer ID|Apple Distribution|Apple Development)' || true")
+  sh_app_root("security find-identity -v -p codesigning | grep -E '(Developer ID|Apple Distribution|Apple Development)' || true")
 
   UI.message("")
   if File.exist?("fastlane/api_key.p8") || (ENV["ASC_KEY_PATH"] && File.exist?(ENV["ASC_KEY_PATH"]))

@@ -4,12 +4,18 @@ options:
   deploymentTarget:
     iOS: "17.0"
     macOS: "14.0"
+# Project-level default, so any target added later inherits the Swift 6
+# language mode instead of xcodegen's built-in 5.0 (#2310).
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
 packages:
   PrimitiveApp:
     url: https://github.com/Primitive-Labs/swift-primitive-app.git
     branch: main
-  # Direct dep so `run-ios.sh` can `swift run swift-bao-codegen`
-  # against the same package graph the SPM plugin uses.
+  # Direct dep so the codegen phase below (and `run-ios.sh`) can
+  # `swift run swift-bao-codegen` against the same package graph the
+  # SPM plugin uses.
   JsBaoClient:
     url: https://github.com/Primitive-Labs/swift-client.git
     branch: main
@@ -30,10 +36,56 @@ targets:
           # xcodegen treats it as a resource and bundles it into the
           # .app — harmless but wasteful.
           - "**/Models/Generated/README.md"
+      # A BUILD PRODUCT, not a tracked file: generated from the selected
+      # Primitive environment in .primitive/config.json by the pre-build phase
+      # below (#2873). The path is non-optional to xcodegen, which is why
+      # scripts/regenerate-project.sh generates it before running xcodegen.
       - path: primitive.json
         buildPhase: resources
       - path: Assets.xcassets
         buildPhase: resources
+    # `swift build` regenerates `Models/Generated/` through the SwiftPM
+    # codegen plugin, but the Xcode target compiles the source list in
+    # `.pbxproj`, where no plugin runs. Without this phase, Xcode's Run
+    # button, a bare `xcodebuild` and CI all compiled whatever structs the
+    # last `./run-ios.sh` happened to leave behind (#2886).
+    #
+    # `models.toml` in, a stamp out: with both declared, Xcode's dependency
+    # analysis skips the phase entirely while the schema is untouched, so a
+    # normal incremental build pays nothing for it.
+    preBuildScripts:
+      - name: Generate models from models.toml
+        basedOnDependencyAnalysis: true
+        inputFiles: [$(SRCROOT)/Sources/PrimitiveAppTemplate/Models/models.toml]
+        outputFiles: [$(DERIVED_FILE_DIR)/models-codegen.stamp]
+        script: bash "$SRCROOT/scripts/generate-models.sh" --verify-project
+      # Re-resolve primitive.json on EVERY build, before Copy Bundle Resources
+      # runs. Building straight from Xcode (Run, Profile, Archive) must pick up
+      # the current `primitive env use` selection — a phase that could be
+      # skipped would let a build ship the environment a previous one resolved.
+      #
+      # The declared inputs/outputs are what let this run inside Xcode's user
+      # script sandbox: a phase may read its declared inputs and write its
+      # declared outputs. The template therefore leaves script sandboxing at
+      # Xcode's default and never disables it — turning it off in every
+      # scaffolded app to save a build-time file write would be a bad trade,
+      # especially in a template whose entitlements deliberately turn app
+      # sandboxing ON. A static test pins that the setting never appears here.
+      #
+      # `basedOnDependencyAnalysis: false` is about always running, not about
+      # incrementality: the declared I/O exists for sandbox access.
+      #
+      # The resolver script itself is an input: `bash <script>` READS it out of
+      # the source tree, which the sandbox denies unless it is declared.
+      - name: Resolve Primitive environment
+        script: bash "$SRCROOT/scripts/resolve-primitive-config.sh"
+        basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(SRCROOT)/scripts/resolve-primitive-config.sh
+          - $(SRCROOT)/.primitive/config.json
+          - $(SRCROOT)/.primitive/local.json
+        outputFiles:
+          - $(SRCROOT)/primitive.json
     entitlements:
       path: PrimitiveAppTemplate.entitlements
       properties:
@@ -62,7 +114,12 @@ targets:
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Expose the debug inspector to your Mac browser over Wi-Fi (DEBUG builds only)."
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
-        SWIFT_VERSION: "5.0"
+        # Match the SPM manifest's `swiftLanguageModes: [.v6]` (#2310). Both
+        # build paths compile the SAME `Sources/PrimitiveAppTemplate` files —
+        # `./run-ios.sh` through xcodebuild, `./build.sh` / `./run.sh` through
+        # SPM — so a split here would mean Xcode accepts code that `swift build`
+        # rejects.
+        SWIFT_VERSION: "6.0"
         # Signing -- set DEVELOPMENT_TEAM to your Apple Team ID to enable
         # code signing. Empty value works for the iOS Simulator (unsigned dev
         # builds) but cannot be deployed to a real device or TestFlight.

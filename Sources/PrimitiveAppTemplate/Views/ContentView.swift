@@ -40,11 +40,19 @@ struct ContentView: View {
         // custom-scheme links are OS-scoped and work without that.
         // `.notAPlatformLink` is where your app's own routes go.
         //
-        // To actually RECEIVE links you still need at least one transport:
-        // a custom URL scheme (CFBundleURLTypes in Info.plist) and/or
-        // universal links (`applinks:` associated domain + your web domain
-        // serving apple-app-site-association). The demo app's Deep Links
-        // page walks through both.
+        // To actually RECEIVE links you need at least one transport. This
+        // template ships one: the custom URL scheme registered under the
+        // `PrimitiveAuth` URL type in Info-Partial.plist, which is also the
+        // scheme `PrimitiveAuthManager` uses (and which `primitive init`
+        // stamps app-unique). Universal links (`applinks:` associated domain
+        // + your web domain serving apple-app-site-association) are the other
+        // transport; the demo app's Deep Links page walks through both.
+        //
+        // The sign-in EMAIL is code-only until you opt in: set
+        // `authManager.sendsEmailSignInLink = true` and allow-list
+        // `<scheme>://auth/magic-link` in your app's `[auth].emailRedirectUris`.
+        // The checklist, and what each missing piece looks like, is in
+        // Info-Partial.plist and in the authentication guide.
         .onOpenURL { url in
             Task {
                 do {
@@ -126,6 +134,12 @@ struct HomeView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle("Home")
+        // Stable identifier for the post-login smoke test: the idb
+        // `ui_signin` scenario (`scripts/smoke-test.sh`) asserts this
+        // element renders after sign-in. If you replace this view, either
+        // keep the identifier or point the scenario at your own screen via
+        // PRIMITIVE_SMOKE_SUCCESS_ID. See the DevTools agent guide.
+        .accessibilityIdentifier("primitive.template.home")
     }
 }
 

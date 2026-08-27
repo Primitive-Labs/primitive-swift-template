@@ -6,9 +6,18 @@
 #   ./archive.sh mac          -- Archive for macOS (TestFlight / Mac App Store)
 #   ./archive.sh dmg          -- Build a standalone macOS .app (for direct distribution / notarization)
 #
+# Add `--primitive-env <name>` to any of the above to archive against a named
+# Primitive environment instead of the one `primitive env use` selected. The
+# archived bundle carries only that environment's values (#2873).
+#
+# Every mode refuses to archive while the committed generated sources (workflow
+# factories, database types) are out of date — run `bash scripts/codegen.sh`
+# and commit the result first. See the codegen gate below.
+#
 # Prerequisites:
 #   - Apple Developer account ($99/year)
-#   - Set DEVELOPMENT_TEAM in project.yml to your Team ID, then run: xcodegen generate
+#   - Set DEVELOPMENT_TEAM in project.yml to your Team ID (this script regenerates
+#     the Xcode project from project.yml on every run, so no extra step)
 #   - For TestFlight/App Store: app must be registered in App Store Connect
 #   - For notarized DMG: requires Developer ID certificate
 #
@@ -18,6 +27,54 @@ cd "$(dirname "$0")"
 PROJECT="PrimitiveAppTemplate.xcodeproj"
 BUILD_DIR=".build/archives"
 mkdir -p "$BUILD_DIR"
+
+# `--primitive-env <name>` is pulled out before anything else so the resolve
+# step inside regenerate-project.sh (below) sees it. Everything else keeps its
+# position, so `./archive.sh ios` is unchanged.
+MODE_ARGS=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --primitive-env)
+            if [ -z "${2:-}" ]; then
+                echo "--primitive-env requires an environment name" >&2
+                exit 1
+            fi
+            export PRIMITIVE_ENV="$2"; shift 2 ;;
+        --primitive-env=*)
+            export PRIMITIVE_ENV="${1#--primitive-env=}"; shift ;;
+        *) MODE_ARGS+=("$1"); shift ;;
+    esac
+done
+set -- ${MODE_ARGS+"${MODE_ARGS[@]}"}
+
+# Refuse to archive against stale committed generated code (#2911). The
+# workflow factories and database types under Sources/ are generated and
+# COMMITTED, and no build regenerates them — so without this gate the one build
+# that produces a shippable artifact is the one build that can ship types
+# emitted from a schema that no longer exists.
+#
+# This is the `--check` half, not the regenerating half, deliberately: an
+# archive that quietly rewrote committed sources mid-release would upload an
+# artifact built from code no commit contains, and hide the drift instead of
+# reporting it. Regenerating is the developer's step, on the developer's
+# machine, followed by a commit.
+#
+# It reads local TOML only — no network, no login — and exits 0 for an app that
+# has synced neither workflows nor database types. The models are not covered
+# and do not need to be: they are gitignored, and the Xcode target's pre-build
+# phase regenerates them on every build including this one (#2886).
+if ! bash scripts/codegen.sh --check; then
+    echo "" >&2
+    echo "Refusing to archive: the committed generated sources are out of date." >&2
+    echo "  Run \`bash scripts/codegen.sh\` and commit the result, then archive again." >&2
+    exit 1
+fi
+
+# Regenerate the Xcode project from project.yml, then re-copy the app's package
+# pin into it. Without the pin sync an archive can ship the revision Xcode last
+# resolved rather than the one the app is pinned to. See
+# scripts/regenerate-project.sh.
+bash scripts/regenerate-project.sh "$PROJECT"
 
 # Check for team ID
 check_team_id() {
@@ -29,7 +86,7 @@ check_team_id() {
         echo "To fix this:"
         echo "  1. Get your Team ID from https://developer.apple.com/account -> Membership Details"
         echo "  2. Set DEVELOPMENT_TEAM in project.yml"
-        echo "  3. Run: xcodegen generate"
+        echo "  3. Re-run this script — it regenerates the Xcode project from project.yml"
         echo ""
         echo "An Apple Developer account (\$99/year) is required for distribution."
         exit 1
@@ -188,7 +245,7 @@ case "${1:-}" in
         build_dmg
         ;;
     *)
-        echo "Usage: ./archive.sh [ios|mac|dmg]"
+        echo "Usage: ./archive.sh [ios|mac|dmg] [--primitive-env <name>]"
         echo ""
         echo "  ios  -- Archive for iOS TestFlight / App Store"
         echo "  mac  -- Archive for macOS TestFlight / Mac App Store"
