@@ -1,8 +1,16 @@
 #!/bin/bash
 # Build and run on iOS Simulator (default) or a connected physical device (--device).
 #
+# The simulator run targets a device dedicated to this app — named after its
+# bundle id and created on first use — so two apps built from this template
+# never pile onto one simulator (#2999). Override the name with
+# PRIMITIVE_RUN_SIM and the device type it is created from with
+# PRIMITIVE_RUN_SIM_BASE.
+#
 # Usage:
-#   ./run-ios.sh                build & run on simulator
+#   ./run-ios.sh                build & run on this app's simulator
+#   ./run-ios.sh --sim "iPhone 17 Pro"
+#                               build & run on a named (or UDID'd) simulator
 #   ./run-ios.sh --device       build & run on first paired iPhone
 #   ./run-ios.sh --verbose      stream all process logs (simulator only)
 #   ./run-ios.sh --primitive-env alpha
@@ -70,10 +78,12 @@ done
 # into checked-out `Generated/` directories that xcodegen picks up below.
 #
 # The app target also runs the model half as a pre-build phase (#2886), so a
-# build started from Xcode or a bare `xcodebuild` is just as fresh. Running it
-# here too is what lets a NEWLY added model reach the project: xcodegen below
-# needs the file on disk to list it. That is also why this path leaves
-# `--verify-project` off — the regeneration it would ask for is the next line.
+# build started from Xcode or a bare `xcodebuild` is just as fresh. What this
+# call is really for is the COMMITTED halves — the workflow factories and the
+# database types — which nothing else regenerates; the models are emitted again
+# by the regeneration below, which needs them on disk to list a NEWLY added one
+# (#3009). That is also why this path leaves `--verify-project` off — the
+# regeneration it would ask for is the next line.
 bash scripts/codegen.sh
 
 # Regenerate the xcodeproj from project.yml so that newly added source
@@ -164,14 +174,63 @@ fi
 # ────────────────────────────────────────────────────────────────────────────
 # Pick a simulator. Order of preference:
 #   1. --sim <name-or-udid>  (explicit)
-#   2. first booted simulator
-#   3. latest iPhone available
-# Names match case-insensitively; UDIDs match exactly. If `--sim` is
-# given and matches a simulator that isn't booted yet, boot it.
-BOOTED_UDID=""
+#   2. this app's dedicated device, created on first use
+# Names match case-insensitively; UDIDs match exactly. Either way the device
+# is booted if it isn't running yet.
+#
+# The default used to be "whichever simulator happens to be booted", which
+# meant two apps scaffolded from this template on one machine shared a device:
+# app B installed and launched onto app A's simulator, each stealing foreground
+# from the other's dialogs and swallowing the other's idb keystrokes (#2999).
+# The device is keyed on the bundle id instead — the one client-side identity
+# two apps on one machine can never share, already resolved above, and readable
+# in the Simulator's device list. Set PRIMITIVE_RUN_SIM to name the device
+# yourself (e.g. to share one device between two checkouts of the same app on
+# purpose). The smoke test keeps a device of its own ("Smoke — <bundle id>",
+# #2971), so a smoke run never reinstalls the app out from under this one.
+SIM_NAME="${PRIMITIVE_RUN_SIM:-Run — ${BUNDLE_ID}}"
+# The device type the dedicated simulator is created from on first use. Set
+# PRIMITIVE_RUN_SIM_BASE when this Xcode has no such device type (see
+# `xcrun simctl list devicetypes`) or to run on another model.
+SIM_BASE_DEVICE="${PRIMITIVE_RUN_SIM_BASE:-iPhone 17 Pro}"
+
+# Echo "<udid> <state>" for the device named $SIM_NAME, or nothing when this
+# machine has no such device. A Booted match wins, so a name that exists on
+# more than one runtime resolves to the one already running. The name is passed
+# through the environment rather than interpolated into the Python source: it
+# carries a bundle id and whatever PRIMITIVE_RUN_SIM was set to.
+sim_by_name() {
+    xcrun simctl list devices available -j \
+        | RUN_SIM_NAME="$SIM_NAME" python3 -c "
+import json, os, sys
+name = os.environ['RUN_SIM_NAME']
+devices = json.load(sys.stdin)['devices'].values()
+matches = [d for dl in devices for d in dl if d.get('name') == name]
+for d in sorted(matches, key=lambda d: d.get('state') != 'Booted'):
+    print(d['udid'], d.get('state', ''))
+    break
+" 2>/dev/null
+}
+
+# Echo the state ("Booted", "Shutdown", …) of the device with this UDID.
+sim_state() {
+    xcrun simctl list devices -j | SIM_UDID="$1" python3 -c "
+import json, os, sys
+needle = os.environ['SIM_UDID']
+data = json.load(sys.stdin)
+for devices in data.get('devices', {}).values():
+    for d in devices:
+        if d.get('udid') == needle:
+            print(d.get('state', ''))
+            sys.exit(0)
+"
+}
+
+SIM_UDID=""
+SIM_STATE=""
 
 if [ -n "$SIM_TARGET" ]; then
-    BOOTED_UDID=$(SIM_TARGET="$SIM_TARGET" xcrun simctl list devices available -j | SIM_TARGET="$SIM_TARGET" python3 -c "
+    SIM_UDID=$(xcrun simctl list devices available -j | SIM_TARGET="$SIM_TARGET" python3 -c "
 import json, os, sys
 target = os.environ.get('SIM_TARGET', '').strip()
 target_lower = target.lower()
@@ -183,84 +242,70 @@ for runtime, devices in data.get('devices', {}).items():
             print(d['udid'])
             sys.exit(0)
 " 2>/dev/null || true)
-    if [ -z "$BOOTED_UDID" ]; then
+    if [ -z "$SIM_UDID" ]; then
         echo "Error: --sim '$SIM_TARGET' did not match any available simulator." >&2
         echo "  Available simulators: xcrun simctl list devices available" >&2
         exit 1
     fi
-    # Boot it if it isn't already.
-    STATE=$(xcrun simctl list devices -j | BOOTED_UDID="$BOOTED_UDID" python3 -c "
-import json, os, sys
-needle = os.environ['BOOTED_UDID']
-data = json.load(sys.stdin)
-for devices in data.get('devices', {}).values():
-    for d in devices:
-        if d.get('udid') == needle:
-            print(d.get('state', ''))
-            sys.exit(0)
-")
-    if [ "$STATE" != "Booted" ]; then
-        echo "Booting requested simulator..."
-        xcrun simctl boot "$BOOTED_UDID"
-        open -a Simulator
-    fi
+    SIM_STATE=$(sim_state "$SIM_UDID")
 else
-    BOOTED_UDID=$(xcrun simctl list devices booted -j | python3 -c "
-import json, sys
-data = json.load(sys.stdin)
-for runtime, devices in data.get('devices', {}).items():
-    for d in devices:
-        if d['state'] == 'Booted':
-            print(d['udid'])
-            sys.exit(0)
-" 2>/dev/null || true)
+    read -r SIM_UDID SIM_STATE <<<"$(sim_by_name)"
+    if [ -z "${SIM_UDID:-}" ]; then
+        echo "Creating simulator '$SIM_NAME' ($SIM_BASE_DEVICE)..."
+        # Checked explicitly: an empty UDID would reach `simctl install`/
+        # `launch` as "the booted device" — the other app's simulator this
+        # whole block exists to stay off (#2999).
+        CREATE_ERR=$(mktemp -t run-ios-create.XXXXXX)
+        CREATE_STATUS=0
+        SIM_UDID=$(xcrun simctl create "$SIM_NAME" "$SIM_BASE_DEVICE" 2>"$CREATE_ERR") \
+            || CREATE_STATUS=$?
+        if [ "$CREATE_STATUS" != "0" ] || [ -z "${SIM_UDID:-}" ]; then
+            echo "Error: Could not create simulator '$SIM_NAME' from device type '$SIM_BASE_DEVICE'." >&2
+            sed 's/^/  /' "$CREATE_ERR" >&2
+            echo "  Set PRIMITIVE_RUN_SIM_BASE to a device type this Xcode has" >&2
+            echo "  (see: xcrun simctl list devicetypes)." >&2
+            rm -f "$CREATE_ERR"
+            exit 1
+        fi
+        rm -f "$CREATE_ERR"
+        SIM_STATE="Shutdown"
+    fi
 fi
 
-if [ -z "$BOOTED_UDID" ]; then
-    echo "No simulator booted. Starting one..."
-    # Find latest iPhone simulator
-    SIM_UDID=$(xcrun simctl list devices available -j | python3 -c "
-import json, sys
-data = json.load(sys.stdin)
-for runtime in sorted(data.get('devices', {}).keys(), reverse=True):
-    if 'iOS' not in runtime: continue
-    for d in data['devices'][runtime]:
-        if 'iPhone' in d['name'] and d['isAvailable']:
-            print(d['udid'])
-            sys.exit(0)
-print('', end='')
-")
-    if [ -z "$SIM_UDID" ]; then
-        echo "Error: No available iPhone simulator found."
-        exit 1
-    fi
+if [ "$SIM_STATE" != "Booted" ]; then
+    echo "Booting simulator '$SIM_NAME' ($SIM_UDID)..."
     xcrun simctl boot "$SIM_UDID"
-    BOOTED_UDID="$SIM_UDID"
+    # Wait the boot out before anything installs or launches: on a device
+    # created moments ago — the first-run case now that each app has its own —
+    # `simctl launch` against one still coming up fails with "Unable to lookup
+    # in current state: Booting".
+    xcrun simctl bootstatus "$SIM_UDID"
     # Open Simulator.app so you can see it
     open -a Simulator
 fi
 
-SIM_NAME=$(xcrun simctl list devices -j | python3 -c "
-import json, sys
+SIM_NAME=$(xcrun simctl list devices -j | SIM_UDID="$SIM_UDID" python3 -c "
+import json, os, sys
+needle = os.environ['SIM_UDID']
 data = json.load(sys.stdin)
 for devices in data.get('devices', {}).values():
     for d in devices:
-        if d['udid'] == '$BOOTED_UDID':
+        if d['udid'] == needle:
             print(d['name'])
             sys.exit(0)
 ")
-echo "Using simulator: $SIM_NAME ($BOOTED_UDID)"
+echo "Using simulator: $SIM_NAME ($SIM_UDID)"
 
 echo "Building for iOS Simulator..."
 xcodebuild build \
     -project "$PROJECT" \
     -scheme "$SCHEME" \
-    -destination "id=$BOOTED_UDID" \
+    -destination "id=$SIM_UDID" \
     -quiet \
     2>&1
 
 # Find the built .app
-BUILD_DIR=$(xcodebuild -project "$PROJECT" -scheme "$SCHEME" -destination "id=$BOOTED_UDID" -showBuildSettings 2>/dev/null | grep " BUILT_PRODUCTS_DIR" | awk '{print $3}')
+BUILD_DIR=$(xcodebuild -project "$PROJECT" -scheme "$SCHEME" -destination "id=$SIM_UDID" -showBuildSettings 2>/dev/null | grep " BUILT_PRODUCTS_DIR" | awk '{print $3}')
 APP_PATH="$BUILD_DIR/PrimitiveAppTemplate.app"
 
 if [ ! -d "$APP_PATH" ]; then
@@ -269,23 +314,23 @@ if [ ! -d "$APP_PATH" ]; then
 fi
 
 echo "Installing..."
-xcrun simctl install "$BOOTED_UDID" "$APP_PATH"
+xcrun simctl install "$SIM_UDID" "$APP_PATH"
 
 echo "Launching..."
-xcrun simctl launch "$BOOTED_UDID" "$BUNDLE_ID"
+xcrun simctl launch "$SIM_UDID" "$BUNDLE_ID"
 
 echo "Running on $SIM_NAME -- streaming logs (Ctrl+C to stop)"
 echo "─────────────────────────────────────────────────────────"
 
 if [ "$VERBOSE" = true ]; then
     # All logs from the process (includes Apple framework noise)
-    xcrun simctl spawn "$BOOTED_UDID" log stream \
+    xcrun simctl spawn "$SIM_UDID" log stream \
         --predicate "process == \"$APP_NAME\"" \
         --level debug \
         --style compact
 else
     # Only our app's logs (PrimitiveApp library + NSLog/print output)
-    xcrun simctl spawn "$BOOTED_UDID" log stream \
+    xcrun simctl spawn "$SIM_UDID" log stream \
         --predicate "subsystem BEGINSWITH \"com.primitivelabs\" OR (process == \"$APP_NAME\" AND subsystem == \"\")" \
         --level debug \
         --style compact

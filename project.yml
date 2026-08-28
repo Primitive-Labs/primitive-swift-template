@@ -94,6 +94,23 @@ targets:
         # network.server lets sandboxed macOS builds bind the DebugInspector's NWListener.
         # Harmless in release (release excludes DebugInspector entirely via #if DEBUG).
         com.apple.security.network.server: true
+        # Universal links (#2982) — the emailed https sign-in link opening THIS
+        # app instead of the browser. Uncomment and name your web domain once
+        # BOTH of these are true, in this order:
+        #
+        #   1. https://<your-web-domain>/.well-known/apple-app-site-association
+        #      is deployed and verified (200, application/json, no redirect —
+        #      the web template ships the file and the checklist under
+        #      public/.well-known/). Apple's CDN caches what it fetches, so an
+        #      entitlement added before the document is live buys a cached miss.
+        #   2. This target has a real DEVELOPMENT_TEAM: an associated domain is
+        #      checked against the app's team + bundle id, so it cannot be
+        #      signed with the empty team the template ships.
+        #
+        # com.apple.developer.associated-domains:
+        #   - applinks:your-web-domain.com
+        #   # Native passkeys use the same file (#929):
+        #   # - webcredentials:your-web-domain.com
     dependencies:
       - package: PrimitiveApp
         product: PrimitiveApp
@@ -104,6 +121,19 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        # Orientations, spelled out because the Info.plist is GENERATED: with
+        # no INFOPLIST_KEY_UISupportedInterfaceOrientations* setting the plist
+        # named none, and xcodegen's iOS preset claims iPad
+        # (TARGETED_DEVICE_FAMILY "1,2"), so App Store Connect rejected the
+        # first upload of every scaffolded app — "No orientations were
+        # specified … To support iPad multitasking" (90474, #3010).
+        #
+        # The lists are Xcode's own new-app defaults. iPad takes all four:
+        # multitasking is what the validator is asking about. Narrowing the
+        # app to iPhone (TARGETED_DEVICE_FAMILY: "1") is the other legal
+        # answer — then the _iPad list is unused, not optional-with-iPad.
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         # Debug-only: PrimitiveApp's DebugInspector advertises an HTTP server over Bonjour
         # so a dev's Mac browser can hit the app's debug UI over Wi-Fi. iOS gates all local
         # network traffic behind a one-time permission prompt; the Info.plist keys below make

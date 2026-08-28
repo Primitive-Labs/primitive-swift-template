@@ -1,7 +1,12 @@
 #!/bin/bash
 # Regenerate the Xcode project from project.yml, then re-sync the Xcode SPM pin.
 #
-# Those two steps are always one operation, in this order:
+# Those steps are always one operation, in this order:
+#
+#   scripts/generate-models.sh
+#       emits Models/Generated/*.swift from models.toml. Those files are
+#       gitignored build products, so on a fresh clone they do not exist yet —
+#       and xcodegen can only list a file that is already on disk (#3009).
 #
 #   xcodegen generate
 #       rewrites <App>.xcodeproj from project.yml, so newly added sources
@@ -15,7 +20,15 @@
 #
 # Every caller that regenerates — run-ios.sh, archive.sh, scripts/smoke-test.sh
 # and the fastlane lanes — goes through this script instead of repeating the
-# pair, so the order and the error policy are defined in one place.
+# sequence, so the order and the error policy are defined in one place.
+#
+# Only the MODEL codegen belongs here. Those files are gitignored and every
+# build rewrites them, so emitting one more time costs nothing and can surprise
+# nobody. The workflow factories and database types are COMMITTED: regenerating
+# them is the developer's step, followed by a commit, and archive.sh checks them
+# rather than rewriting them mid-release (#2911). `scripts/codegen.sh` is the
+# entry point for all three; callers that run it (run-ios.sh, run.sh,
+# smoke-test.sh) simply pay a second, byte-identical model pass here.
 #
 # Policy: xcodegen is required. An earlier version of this pair warned and
 # carried on when xcodegen was missing, which leaves the build compiling an
@@ -50,6 +63,21 @@ if ! command -v xcodegen >/dev/null 2>&1; then
     echo "  Install it with: brew install xcodegen" >&2
     exit 1
 fi
+
+# Emit the models BEFORE xcodegen scans for sources (#3009). Models/Generated/
+# is gitignored, so on a fresh clone — or any machine that has not built this
+# app yet — it is empty, and a project generated from it lists no model
+# sources. The archive's pre-build phase then emits the files and its
+# `--verify-project` guard correctly fails the build, telling the developer to
+# run the regeneration their lane just ran. Because that failed run leaves the
+# files behind, the second attempt succeeds: first-run-only, self-healing, and
+# indistinguishable from a broken template.
+#
+# After the xcodegen check, not before: a missing xcodegen is the cheap failure
+# and should not wait on a Swift build of the codegen tool.
+#
+# Progress goes to stderr in generate-models.sh, so stdout stays empty here.
+bash scripts/generate-models.sh
 
 # The quiet attempt covers the common case. A failure there can be a spec error
 # worth reading — or just an xcodegen too old to know `--quiet` — so retry
