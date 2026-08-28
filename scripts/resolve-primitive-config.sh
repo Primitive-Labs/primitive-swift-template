@@ -6,7 +6,11 @@
 # the selected environment's values into the flat shape
 # `PrimitiveCredentials.swift` already parses:
 #
-#   { "primitiveEnv": "...", "appId": "...", "appName": "...", "serverUrl": "..." }
+#   { "primitiveEnv": "...", "appId": "...", "appName": "...", "serverUrl": "...",
+#     "webUrl": "..." }
+#
+# `webUrl` is written only when the selected environment has one — it is the
+# app's web counterpart, and the emailed sign-in link points at it (#2982).
 #
 # The loader derives the WebSocket URL from serverUrl by scheme swap and
 # ignores keys it doesn't know, so the `_generated` marker is harmless.
@@ -166,6 +170,7 @@ python3 - <<'PYTHON'
 import json
 import os
 import sys
+from urllib.parse import urlsplit
 
 CONFIG_VERSION = 1
 
@@ -181,6 +186,52 @@ def fail(kind, *lines):
     for line in lines:
         print(line, file=sys.stderr)
     sys.exit(1)
+
+
+def normalized_web_origin(value):
+    """The app's web counterpart as a normalized ORIGIN, or None (#2982).
+
+    The port of `normalizeWebOrigin` in the CLI's env-resolver-core, pinned to
+    it by the parity test. This value is not merely carried into the build: the
+    app points its emailed sign-in link at <webUrl>/oauth/callback and trusts
+    incoming universal links from the same origin, so a value that is not an
+    origin -- non-loopback http (which the server refuses to allow-list, and
+    which would carry the magic token in clear), a path (a callback neither the
+    web client nor the association file uses), a query, a fragment, embedded
+    credentials -- is read as "this environment has no web counterpart" rather
+    than written into primitive.json. `primitive env add --web-url` rejects
+    those shapes with a message; a hand-edited config never passes through it.
+    """
+    if not isinstance(value, str):
+        return None
+    trimmed = value.strip()
+    if not trimmed:
+        return None
+    parts = urlsplit(trimmed)
+    scheme = parts.scheme.lower()
+    if scheme not in ("http", "https"):
+        return None
+    try:
+        host = parts.hostname
+        port = parts.port
+    except ValueError:
+        return None
+    if not host:
+        return None
+    if scheme == "http" and host not in ("localhost", "127.0.0.1"):
+        return None
+    if parts.username or parts.password:
+        return None
+    if parts.path not in ("", "/"):
+        return None
+    if parts.query or parts.fragment:
+        return None
+    # Bracket an IPv6 literal, and drop the scheme's default port, exactly as
+    # the URL origin the TypeScript side produces does.
+    authority = "[%s]" % host if ":" in host else host
+    if port is not None and port != (443 if scheme == "https" else 80):
+        authority = "%s:%d" % (authority, port)
+    return "%s://%s" % (scheme, authority)
 
 
 try:
@@ -303,6 +354,14 @@ if not isinstance(app_id, str):
 app_name = entry.get("appName")
 if not isinstance(app_name, str):
     app_name = None
+# The app's web counterpart for THIS environment (#2982): the origin whose
+# /oauth/callback the emailed sign-in link points at, and the origin an
+# incoming universal link is trusted from. Only the selected environment's
+# value is written, so a dev build never carries the production callback, and
+# only an origin is written (see normalized_web_origin) -- anything else is a
+# web counterpart this app could not actually use.
+web_url_raw = entry.get("webUrl")
+web_url = normalized_web_origin(web_url_raw)
 
 if not app_id:
     fail(
@@ -320,6 +379,8 @@ document = {
 }
 if app_name:
     document["appName"] = app_name
+if web_url:
+    document["webUrl"] = web_url
 
 with open(output_path, "w") as handle:
     json.dump(document, handle, indent=2)
@@ -333,6 +394,19 @@ report = [
     "[primitive-config]   apiUrl:  %s" % api_url,
     "[primitive-config]   appId:   %s" % app_id,
     "[primitive-config]   appName: %s" % (app_name or "(unset)"),
+    "[primitive-config]   webUrl:  %s" % (web_url or "(unset)"),
+]
+if web_url is None and isinstance(web_url_raw, str) and web_url_raw.strip():
+    # Said out loud: a dropped value looks exactly like an unset one in the
+    # app, and "my sign-in email has no link" is a hard symptom to trace back
+    # to a typo'd origin.
+    report.append(
+        '[primitive-config]   IGNORED webUrl "%s" — it is not a web origin '
+        "(https, or http on localhost/127.0.0.1; no credentials, path, query "
+        "or fragment). This environment is treated as having no web "
+        "counterpart." % web_url_raw
+    )
+report += [
     "[primitive-config]   config:  %s" % config_path,
     "[primitive-config]   wrote:   %s" % output_path,
 ]

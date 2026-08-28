@@ -22,7 +22,20 @@
 
 	  Sign-in email: CODE-ONLY BY DEFAULT, and that works with no configuration
 	  at all — the manager sends no redirect target, so the server never
-	  consults the allow-list. Turning the emailed LINK on takes two steps:
+	  consults the allow-list.
+
+	  IF THIS APP HAS A WEB COUNTERPART, prefer the https link over the custom
+	  scheme below: add "webUrl": "https://your-web-domain" to the environment
+	  in .primitive/config.json (a bare origin; `primitive env add` takes a
+	  web-url option when it CREATES an environment, but cannot edit one that
+	  already exists) and the sign-in email carries
+	  "https://your-web-domain/oauth/callback" instead. That one link
+	  opens THIS app when it is installed (a universal link, once the domain
+	  serves apple-app-site-association and the applinks entitlement names it)
+	  and is an ordinary web sign-in in any browser. Allow-list that https URL
+	  the same way. The full checklist is in the authentication guide.
+
+	  Turning the custom-scheme LINK on instead takes two steps:
 
 	    1. Merge "<scheme>://auth/magic-link" into the existing
 	       [auth].emailRedirectUris array in your app's config/app.toml and
@@ -42,9 +55,10 @@
 
 	  A custom-scheme link only opens on a device that has this app installed:
 	  dead in the Simulator, dead cross-device, and most webmail clients will
-	  not render a non-http(s) href as a link. The code is the credential that
-	  always works. The same scheme carries the OAuth callback
-	  ("<scheme>://oauth/callback") when you use `startOAuth()`.
+	  not render a non-http(s) href as a link — which is exactly what the https
+	  link above fixes. The code is the credential that always works. The same
+	  scheme carries the OAuth callback ("<scheme>://oauth/callback") when you
+	  use `startOAuth()`.
 	-->
 	<key>CFBundleURLTypes</key>
 	<array>

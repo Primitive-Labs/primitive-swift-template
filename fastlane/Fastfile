@@ -32,6 +32,33 @@ def project_yml_name
   yml.match(/^name:\s*(\S+)/)&.captures&.first || "PrimitiveAppTemplate"
 end
 
+# Where the App Store Connect API key lives, as `.env.example` documents it:
+# relative to the APP ROOT, the directory the developer runs fastlane from.
+ASC_KEY_PATH_DEFAULT = "./fastlane/api_key.p8"
+
+# The configured key path, exactly as the developer wrote it — for messages.
+def asc_key_path
+  path = ENV["ASC_KEY_PATH"].to_s
+  path.empty? ? ASC_KEY_PATH_DEFAULT : path
+end
+
+# The file that path points at.
+#
+# ASC_KEY_PATH is documented from the app root — `.env.example` ships
+# `./fastlane/api_key.p8` and the guide below says to save the key to
+# `fastlane/api_key.p8`. Ruby in a Fastfile runs from `fastlane/`, so resolving
+# it there looked for `fastlane/fastlane/api_key.p8`: the shipped default could
+# never match the documented location (#3007). Resolve from the app root, and
+# fall back to fastlane's own directory so a path written against the old
+# behavior keeps working. An absolute path (or a `~` one) resolves to itself
+# either way.
+def asc_key_file(key_path = asc_key_path)
+  from_app_root = File.expand_path(key_path, "..")
+  return from_app_root if File.exist?(from_app_root)
+  from_fastlane = File.expand_path(key_path)
+  File.exist?(from_fastlane) ? from_fastlane : from_app_root
+end
+
 ASC_KEY_GUIDE = <<~MSG
   App Store Connect API key is required for TestFlight / App Store uploads.
 
@@ -40,7 +67,7 @@ ASC_KEY_GUIDE = <<~MSG
     2. Click "Generate API Key" (or "+"). Role: Admin or App Manager.
     3. Note the Key ID and Issuer ID shown on the page.
     4. Download the .p8 file — one-time download.
-    5. Save the .p8 to fastlane/api_key.p8 (relative to this directory).
+    5. Save the .p8 to fastlane/api_key.p8 (relative to the app root).
     6. Copy fastlane/.env.example to fastlane/.env and fill in:
          ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_PATH
 
@@ -50,12 +77,13 @@ MSG
 def load_api_key
   key_id = ENV["ASC_KEY_ID"]
   issuer_id = ENV["ASC_ISSUER_ID"]
-  key_path = ENV["ASC_KEY_PATH"] || "./fastlane/api_key.p8"
+  key_path = asc_key_path
+  key_file = asc_key_file(key_path)
 
   missing = []
   missing << "ASC_KEY_ID" if key_id.nil? || key_id.empty? || key_id == "YOUR_KEY_ID"
   missing << "ASC_ISSUER_ID" if issuer_id.nil? || issuer_id.empty? || issuer_id == "YOUR_ISSUER_ID"
-  missing << "#{key_path} (key file)" unless File.exist?(File.expand_path(key_path))
+  missing << "#{key_path} (key file, looked for #{key_file})" unless File.exist?(key_file)
 
   unless missing.empty?
     UI.error("Missing App Store Connect credentials: #{missing.join(', ')}")
@@ -67,7 +95,7 @@ def load_api_key
   app_store_connect_api_key(
     key_id: key_id,
     issuer_id: issuer_id,
-    key_filepath: key_path,
+    key_filepath: key_file,
     in_house: false
   )
 end
@@ -353,7 +381,7 @@ lane :status do
   sh_app_root("security find-identity -v -p codesigning | grep -E '(Developer ID|Apple Distribution|Apple Development)' || true")
 
   UI.message("")
-  if File.exist?("fastlane/api_key.p8") || (ENV["ASC_KEY_PATH"] && File.exist?(ENV["ASC_KEY_PATH"]))
+  if File.exist?(asc_key_file)
     UI.success("App Store Connect API key: configured")
   else
     UI.important("App Store Connect API key: not configured")

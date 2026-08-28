@@ -48,23 +48,40 @@ struct ContentView: View {
         // + your web domain serving apple-app-site-association) are the other
         // transport; the demo app's Deep Links page walks through both.
         //
-        // The sign-in EMAIL is code-only until you opt in: set
+        // The sign-in EMAIL is code-only until the app has a link target. Give
+        // the environment a `webUrl` in .primitive/config.json and the email
+        // carries that origin's https callback — a universal link on a device
+        // with this app installed, a web sign-in anywhere else (#2982). With
+        // no web counterpart the opt-in is the custom scheme: set
         // `authManager.sendsEmailSignInLink = true` and allow-list
         // `<scheme>://auth/magic-link` in your app's `[auth].emailRedirectUris`.
         // The checklist, and what each missing piece looks like, is in
         // Info-Partial.plist and in the authentication guide.
         .onOpenURL { url in
-            Task {
-                do {
-                    let outcome = try await appState.routePlatformLink(url)
-                    if case .notAPlatformLink(let unhandled) = outcome {
-                        // TODO: your app-specific routes go here, e.g.
-                        // `myapp://settings` → open the settings screen.
-                        appState.setTransientError("No route for link: \(unhandled.absoluteString)")
-                    }
-                } catch {
-                    appState.setTransientError("Couldn't open link: \(error.localizedDescription)")
+            route(url)
+        }
+        // Universal links (https) arrive as a browsing activity, not through
+        // `.onOpenURL` — that is the ONLY delivery on macOS, and it is also
+        // how a link handed off from another device arrives. Without this the
+        // app opens and the sign-in link does nothing.
+        .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+            guard let url = activity.webpageURL else { return }
+            route(url)
+        }
+    }
+
+    /// One routing path for every transport that can deliver a link.
+    private func route(_ url: URL) {
+        Task {
+            do {
+                let outcome = try await appState.routePlatformLink(url)
+                if case .notAPlatformLink(let unhandled) = outcome {
+                    // TODO: your app-specific routes go here, e.g.
+                    // `myapp://settings` → open the settings screen.
+                    appState.setTransientError("No route for link: \(unhandled.absoluteString)")
                 }
+            } catch {
+                appState.setTransientError("Couldn't open link: \(error.localizedDescription)")
             }
         }
     }

@@ -61,8 +61,9 @@ set -- ${MODE_ARGS+"${MODE_ARGS[@]}"}
 #
 # It reads local TOML only — no network, no login — and exits 0 for an app that
 # has synced neither workflows nor database types. The models are not covered
-# and do not need to be: they are gitignored, and the Xcode target's pre-build
-# phase regenerates them on every build including this one (#2886).
+# here and do not need to be: they are gitignored, and the regeneration below
+# emits them before xcodegen scans for sources (#3009), so even a first-ever
+# archive on a fresh clone builds a project that lists them.
 if ! bash scripts/codegen.sh --check; then
     echo "" >&2
     echo "Refusing to archive: the committed generated sources are out of date." >&2
