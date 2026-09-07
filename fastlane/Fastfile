@@ -1,3 +1,6 @@
+require "shellwords"
+require "fileutils"
+
 default_platform(:ios)
 
 # ---------------------------------------------------------------------------
@@ -100,6 +103,84 @@ def load_api_key
   )
 end
 
+# Where signing assets fetched from App Store Connect land, relative to the APP
+# ROOT (the template's .gitignore already covers `.build/`).
+SIGNING_DIR = ".build/signing"
+
+# The xcargs an App Store archive needs to authenticate as the ASC API key.
+#
+# gym forwards the lane's `api_key` to exportArchive only, never to the archive,
+# so a bare `-allowProvisioningUpdates` falls back to Xcode's account session
+# and the archive fails with `No Accounts` on a machine with no Apple ID
+# (#3008). Passing the key explicitly is what makes the archive work there.
+#
+# These flags must go to the ARCHIVE ONLY — never also in `export_xcargs`. gym
+# injects its own copy into exportArchive, and a second one is a hard error:
+# `option '-authenticationKeyPath' may only be provided once`.
+def asc_xcodebuild_auth
+  [
+    "-allowProvisioningUpdates",
+    "-authenticationKeyPath #{Shellwords.escape(asc_key_file)}",
+    "-authenticationKeyID #{Shellwords.escape(ENV['ASC_KEY_ID'].to_s)}",
+    "-authenticationKeyIssuerID #{Shellwords.escape(ENV['ASC_ISSUER_ID'].to_s)}",
+  ].join(" ")
+end
+
+# Fetch the App Store signing assets through the API key, and return the
+# `export_options` that use them. iOS App Store lanes only.
+#
+# Manual signing, not `signingStyle: automatic`: automatic goes through Xcode
+# cloud signing, which mints distribution certificates only for an **Admin**
+# key, while this template's own docs prescribe an **App Manager** key — so the
+# automatic path always failed with `No signing certificate "iOS Distribution"
+# found`. The two REST actions below work for App Manager too (#3008).
+def app_store_export_options(api_key, team_id)
+  bundle_id = project_yml_value("PRODUCT_BUNDLE_IDENTIFIER")
+  if bundle_id.nil? || bundle_id.empty?
+    UI.user_error!(
+      "PRODUCT_BUNDLE_IDENTIFIER is empty in project.yml — the App Store " \
+      "provisioning profile is requested for it. Set it and re-run."
+    )
+  end
+
+  # Ruby file operations run with fastlane's working directory (`fastlane/`),
+  # while the fastlane actions below run from the app root — hence the `../`
+  # here and the bare app-root-relative path handed to the actions.
+  dir = File.expand_path(SIGNING_DIR, "..")
+  FileUtils.mkdir_p(File.dirname(dir))
+  # 0700 before the fetch, and again for a directory that already existed:
+  # mkdir_p's mode applies only to what it creates.
+  FileUtils.mkdir_p(dir, mode: 0o700)
+  File.chmod(0o700, dir)
+
+  get_certificates(api_key: api_key, team_id: team_id, output_path: SIGNING_DIR)
+
+  # `get_certificates` generates an Apple Distribution private key and CSR and
+  # writes both here before importing the identity into the keychain. The
+  # keychain is the canonical store from then on; the files are a reusable
+  # distribution private key that .gitignore does not protect from backups or
+  # CI artifact collection, so they go immediately (#3008). The provisioning
+  # profile is not secret and stays.
+  #
+  # Listed rather than globbed: `dir` sits under the developer's app path, and a
+  # `[` or `{` anywhere in it would make a glob pattern match nothing and leave
+  # the private key on disk.
+  FileUtils.rm_f(
+    Dir.children(dir)
+      .select { |entry| entry.end_with?(".p12", ".certSigningRequest") }
+      .map { |entry| File.join(dir, entry) }
+  )
+
+  profile = get_provisioning_profile(
+    api_key: api_key,
+    team_id: team_id,
+    app_identifier: bundle_id,
+    output_path: SIGNING_DIR,
+  )
+
+  { signingStyle: "manual", provisioningProfiles: { bundle_id => profile } }
+end
+
 def require_team_id
   team_id = project_yml_value("DEVELOPMENT_TEAM")
   if team_id.nil? || team_id.empty?
@@ -138,7 +219,7 @@ end
 platform :ios do
   desc "Build and upload iOS app to TestFlight"
   lane :beta do
-    require_team_id
+    team_id = require_team_id
     api_key = load_api_key
     name = project_yml_name
 
@@ -147,8 +228,8 @@ platform :ios do
       scheme: "#{name}_iOS",
       destination: "generic/platform=iOS",
       export_method: "app-store",
-      export_options: { signingStyle: "automatic" },
-      xcargs: "-allowProvisioningUpdates",
+      export_options: app_store_export_options(api_key, team_id),
+      xcargs: asc_xcodebuild_auth,
       output_directory: ".build/archives",
       output_name: "#{name}-iOS.ipa",
       clean: true,
@@ -166,7 +247,7 @@ platform :ios do
 
   desc "Build and submit iOS app to App Store review"
   lane :release do
-    require_team_id
+    team_id = require_team_id
     api_key = load_api_key
     name = project_yml_name
 
@@ -175,8 +256,8 @@ platform :ios do
       scheme: "#{name}_iOS",
       destination: "generic/platform=iOS",
       export_method: "app-store",
-      export_options: { signingStyle: "automatic" },
-      xcargs: "-allowProvisioningUpdates",
+      export_options: app_store_export_options(api_key, team_id),
+      xcargs: asc_xcodebuild_auth,
       output_directory: ".build/archives",
       output_name: "#{name}-iOS.ipa",
       clean: true,

@@ -16,6 +16,11 @@
 # Usage:
 #   bash scripts/generate-models.sh [--verify-project]
 #
+# --print-schema resolves the schema and the app's source directory, prints them
+# on two lines and generates nothing. `scripts/codegen.sh` uses it to name the
+# schema in the build phase's declared input list (#3078) rather than repeating
+# the resolution and letting the two drift.
+#
 # --verify-project additionally fails when the Xcode source list and the
 # emitted files disagree, in either direction. Codegen can refresh a CHANGED
 # model in place, but ADDING one emits a file the `.pbxproj` does not compile,
@@ -36,9 +41,11 @@ set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 VERIFY_PROJECT=false
+PRINT_SCHEMA=false
 while [ $# -gt 0 ]; do
     case "$1" in
         --verify-project) VERIFY_PROJECT=true; shift ;;
+        --print-schema) PRINT_SCHEMA=true; shift ;;
         *) echo "Unknown argument: $1" >&2; exit 1 ;;
     esac
 done
@@ -88,6 +95,13 @@ fi
 # Always the app's own directory: the generated types belong to this target
 # even when the schema they come from lives outside it.
 GEN_DIR="$APP_SOURCES/Models/Generated"
+
+if [ "$PRINT_SCHEMA" = true ]; then
+    echo "$SCHEMA_TOML"
+    echo "$APP_SOURCES"
+    exit 0
+fi
+
 mkdir -p "$GEN_DIR"
 
 # Xcode exports the target's SDK into every script phase. `swift run` builds
@@ -101,147 +115,12 @@ swift run --package-path . swift-bao-codegen \
     --output "$GEN_DIR" >&2
 
 if [ "$VERIFY_PROJECT" = true ]; then
-    PBXPROJ=""
-    for container in *.xcodeproj; do
-        [ -f "$container/project.pbxproj" ] || continue
-        PBXPROJ="$container/project.pbxproj"
-        break
-    done
-
-    if [ -n "$PBXPROJ" ]; then
-        # Space-separated strings rather than arrays: bash 3.2 ships with
-        # macOS, and `${#array[@]}` on an empty array trips `set -u` there.
-        ON_DISK=""
-        for generated in "$GEN_DIR"/*.swift; do
-            [ -f "$generated" ] || continue
-            ON_DISK="$ON_DISK $(basename "$generated")"
-        done
-
-        # The files each `Sources` build phase compiles, one phase per line.
-        # Membership there is the question, not a mention anywhere in the file:
-        # a `PBXFileReference` xcodegen left in a group compiles nothing.
-        SOURCES_PHASES="$(awk '
-            /isa = PBXSourcesBuildPhase;/ { inside = 1; files = ""; next }
-            inside {
-                if ($0 ~ /^[[:space:]]*\};/) { print files; inside = 0; next }
-                if (match($0, /\/\* [^*]+ in Sources \*\/,/)) {
-                    files = files " " substr($0, RSTART + 3, RLENGTH - 18)
-                }
-            }
-        ' "$PBXPROJ")"
-
-        # What THIS codegen's own group still lists. Codegen has already swept
-        # the file of a model dropped from the schema, so a name here with
-        # nothing on disk is an entry only xcodegen can drop.
-        #
-        # The group is identified by where it sits in the group tree, not by
-        # its name: an app has more than one group named `Generated` the
-        # moment it has synced workflows, because `scripts/codegen.sh` writes
-        # the workflow factories to `Workflows/Generated` and xcodegen lists
-        # that group too. Matching the name alone read every workflow factory
-        # as a model the schema no longer declares, and failed the build of
-        # any app that had run workflow codegen (#2930).
-        #
-        # So: parse every `PBXGroup`, resolve each one's path by walking its
-        # ancestors (a group contributes its own `path`, if it has one — a
-        # `name`-only group is a folder that exists in the navigator alone),
-        # and take the one that resolves to `$GEN_DIR`. A project with no such
-        # group lists nothing, which reports no obsolete files; the added-model
-        # half of the check reads the build phases and is unaffected.
-        LISTED="$(awk -v want="$GEN_DIR" '
-            function unquote(value) { gsub(/^"|"$/, "", value); return value }
-            # Where a group sits: its ancestors, outermost first. Groups form a
-            # tree, so the walk terminates; the cap is belt and braces.
-            function resolve(id,   path, hops) {
-                path = ""
-                for (hops = 0; id != "" && hops < 64; hops++) {
-                    if (id in group_path && group_path[id] != "") {
-                        path = (path == "" ? group_path[id] : group_path[id] "/" path)
-                    }
-                    id = parent[id]
-                }
-                return path
-            }
-            # `<id> /* comment */ = {` opens an object. A one-line object (every
-            # PBXFileReference is one) carries its body after the brace and is
-            # skipped: only groups are read here.
-            /=[[:space:]]*\{[[:space:]]*$/ { current = unquote($1); next }
-            /^[[:space:]]*\};/ { current = ""; next }
-            current == "" { next }
-            /^[[:space:]]*isa = PBXGroup;/ { is_group[current] = 1; next }
-            /^[[:space:]]*path = / {
-                value = $0
-                sub(/^[[:space:]]*path = /, "", value)
-                sub(/;[[:space:]]*$/, "", value)
-                group_path[current] = unquote(value)
-                next
-            }
-            # A child entry: `<id> /* name */,`.
-            /^[[:space:]]*[^[:space:]]+ \/\* .* \*\/,[[:space:]]*$/ {
-                parent[unquote($1)] = current
-                name = $0
-                sub(/^[^\/]*\/\* /, "", name)
-                sub(/ \*\/,[[:space:]]*$/, "", name)
-                if (name ~ /\.swift$/) children[current] = children[current] " " name
-            }
-            END {
-                for (id in is_group) if (resolve(id) == want) print children[id]
-            }
-        ' "$PBXPROJ")"
-
-        # A phase compiling none of our files (a test target) is not in the
-        # model business; one compiling some of them has to compile all, which
-        # is also how a file listed for the iOS target but not the macOS one
-        # gets caught. A project compiling none of them at all lists nothing
-        # yet — every emitted file is missing from it.
-        MISSING=""
-        COMPILING_PHASES=0
-        while IFS= read -r phase; do
-            compiles_ours=false
-            for name in $ON_DISK; do
-                case " $phase " in *" $name "*) compiles_ours=true; break ;; esac
-            done
-            [ "$compiles_ours" = true ] || continue
-            COMPILING_PHASES=$((COMPILING_PHASES + 1))
-            for name in $ON_DISK; do
-                case " $phase " in
-                    *" $name "*) ;;
-                    *) case " $MISSING " in
-                           *" $name "*) ;;
-                           *) MISSING="$MISSING $name" ;;
-                       esac ;;
-                esac
-            done
-        done <<EOF
-$SOURCES_PHASES
-EOF
-        if [ "$COMPILING_PHASES" -eq 0 ]; then
-            MISSING="$ON_DISK"
-        fi
-
-        OBSOLETE=""
-        for name in $LISTED; do
-            case " $ON_DISK " in
-                *" $name "*) ;;
-                *) OBSOLETE="$OBSOLETE $name" ;;
-            esac
-        done
-
-        if [ -n "$MISSING" ] || [ -n "$OBSOLETE" ]; then
-            if [ -n "$MISSING" ]; then
-                echo "error: $SCHEMA_TOML declares models the Xcode project does not compile yet:$MISSING" >&2
-            fi
-            if [ -n "$OBSOLETE" ]; then
-                echo "error: the Xcode project still compiles files $SCHEMA_TOML no longer declares:$OBSOLETE" >&2
-            fi
-            echo "  Codegen refreshes a changed model in place, but adding or removing one changes" >&2
-            echo "  the set of files, and the Xcode project lists its sources explicitly." >&2
-            echo "  Regenerate the project:" >&2
-            echo "      bash scripts/regenerate-project.sh" >&2
-            echo "  (or run ./run-ios.sh, which does it for you), then build again." >&2
-            exit 1
-        fi
-    fi
+    # The check itself lives in its own script (#3078): `scripts/codegen.sh`
+    # runs it across all three generated directories at once, after every
+    # generator has emitted, so one class's project mismatch cannot stop
+    # another class from regenerating. This flag keeps working for a caller
+    # that wants the model half alone.
+    bash scripts/verify-generated-project.sh --label "$SCHEMA_TOML" "$GEN_DIR"
 fi
 
 # The phase declares this stamp as its output file, so Xcode skips the whole

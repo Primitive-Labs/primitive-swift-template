@@ -10,9 +10,12 @@
 # Primitive environment instead of the one `primitive env use` selected. The
 # archived bundle carries only that environment's values (#2873).
 #
-# Every mode refuses to archive while the committed generated sources (workflow
-# factories, database types) are out of date — run `bash scripts/codegen.sh`
-# and commit the result first. See the codegen gate below.
+# This is not a special case (#3078): it regenerates and builds like every
+# other path. `scripts/regenerate-project.sh` runs the full codegen — models,
+# workflow factories, database types — before xcodegen scans for sources, and a
+# failing codegen stops the archive. There is no release-time drift check: a
+# schema change shows up as a working-tree diff on the developer's ordinary
+# build, which is where it gets reviewed and committed.
 #
 # Prerequisites:
 #   - Apple Developer account ($99/year)
@@ -46,30 +49,6 @@ while [ $# -gt 0 ]; do
     esac
 done
 set -- ${MODE_ARGS+"${MODE_ARGS[@]}"}
-
-# Refuse to archive against stale committed generated code (#2911). The
-# workflow factories and database types under Sources/ are generated and
-# COMMITTED, and no build regenerates them — so without this gate the one build
-# that produces a shippable artifact is the one build that can ship types
-# emitted from a schema that no longer exists.
-#
-# This is the `--check` half, not the regenerating half, deliberately: an
-# archive that quietly rewrote committed sources mid-release would upload an
-# artifact built from code no commit contains, and hide the drift instead of
-# reporting it. Regenerating is the developer's step, on the developer's
-# machine, followed by a commit.
-#
-# It reads local TOML only — no network, no login — and exits 0 for an app that
-# has synced neither workflows nor database types. The models are not covered
-# here and do not need to be: they are gitignored, and the regeneration below
-# emits them before xcodegen scans for sources (#3009), so even a first-ever
-# archive on a fresh clone builds a project that lists them.
-if ! bash scripts/codegen.sh --check; then
-    echo "" >&2
-    echo "Refusing to archive: the committed generated sources are out of date." >&2
-    echo "  Run \`bash scripts/codegen.sh\` and commit the result, then archive again." >&2
-    exit 1
-fi
 
 # Regenerate the Xcode project from project.yml, then re-copy the app's package
 # pin into it. Without the pin sync an archive can ship the revision Xcode last

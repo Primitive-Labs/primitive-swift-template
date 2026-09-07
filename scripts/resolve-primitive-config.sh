@@ -188,6 +188,25 @@ def fail(kind, *lines):
     sys.exit(1)
 
 
+# ECMAScript's WhiteSpace + LineTerminator, which is what `String.prototype.trim`
+# strips in the CLI core this file is a port of. Python's `str.strip()` is NOT
+# the same set -- it leaves U+FEFF alone and strips U+001C-U+001F and U+0085,
+# which JavaScript does not -- so a config with a visually blank appId of
+# U+FEFF would be rejected by the CLI and the Vite build while this script read
+# it as a real app id and stamped it into primitive.json. One algorithm, one
+# whitespace set.
+JS_WHITESPACE = (
+    "\t\n\v\f\r \u00a0\u1680\ufeff"
+    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a"
+    "\u2028\u2029\u202f\u205f\u3000"
+)
+
+
+def js_trim(value):
+    """`String.prototype.trim` for a str, character-for-character."""
+    return value.strip(JS_WHITESPACE)
+
+
 def normalized_web_origin(value):
     """The app's web counterpart as a normalized ORIGIN, or None (#2982).
 
@@ -204,7 +223,7 @@ def normalized_web_origin(value):
     """
     if not isinstance(value, str):
         return None
-    trimmed = value.strip()
+    trimmed = js_trim(value)
     if not trimmed:
         return None
     parts = urlsplit(trimmed)
@@ -260,6 +279,34 @@ environments = config.get("environments")
 if not isinstance(environments, dict):
     fail("malformed-config", '%s is missing required "environments" object.' % config_path)
 
+# Every environment names exactly one app, and the check is per ENVIRONMENT at
+# parse rather than after the selection -- parity with the CLI resolver core,
+# which enforces it on the whole file. Non-string and blank-after-trim are the
+# same failure as absent: an app id the Swift app could not use, which must
+# never be read as a silent None.
+def missing_app_id_message(name):
+    return (
+        'Environment "%s" in %s has no "appId". '
+        "Every environment names exactly one app -- add \"appId\": \"<app-id>\" to that "
+        "environment in .primitive/config.json." % (name, config_path)
+    )
+
+
+APP_ID_DISCOVERY = (
+    "Find the app id in the Primitive admin UI, with 'primitive apps list' run from a "
+    'directory outside this project, or as the residual "currentAppId" in '
+    ".primitive/credentials.json if this environment was ever pointed at an app by the "
+    "retired per-machine app selection."
+)
+
+
+def read_app_id(value):
+    if not isinstance(value, str):
+        return None
+    trimmed = js_trim(value)
+    return trimmed or None
+
+
 for name, entry in environments.items():
     if not isinstance(entry, dict):
         fail("malformed-config", 'Environment "%s" must be an object in %s.' % (name, config_path))
@@ -269,6 +316,8 @@ for name, entry in environments.items():
             "malformed-config",
             'Environment "%s" must have a non-empty "apiUrl" string in %s.' % (name, config_path),
         )
+    if read_app_id(entry.get("appId")) is None:
+        fail("missing-app-id", missing_app_id_message(name), APP_ID_DISCOVERY)
 
 # This machine's selection, if any.
 local_selection = None
@@ -348,9 +397,7 @@ api_url = entry["apiUrl"].rstrip("/")
 # non-string "appId"/"appName" as absent rather than writing it into the app's
 # runtime config. Without this a numeric or object appId would reach
 # PrimitiveCredentials as a JSON value it cannot use.
-app_id = entry.get("appId")
-if not isinstance(app_id, str):
-    app_id = None
+app_id = read_app_id(entry.get("appId"))
 app_name = entry.get("appName")
 if not isinstance(app_name, str):
     app_name = None
@@ -362,14 +409,6 @@ if not isinstance(app_name, str):
 # web counterpart this app could not actually use.
 web_url_raw = entry.get("webUrl")
 web_url = normalized_web_origin(web_url_raw)
-
-if not app_id:
-    fail(
-        "missing-app-id",
-        'Environment "%s" in %s has no "appId", and the app cannot start without one.'
-        % (chosen, config_path),
-        "Add it with: primitive env add %s --api-url %s --app-id <id>" % (chosen, api_url),
-    )
 
 document = {
     "_generated": "by scripts/resolve-primitive-config.sh — do not edit",
@@ -396,7 +435,7 @@ report = [
     "[primitive-config]   appName: %s" % (app_name or "(unset)"),
     "[primitive-config]   webUrl:  %s" % (web_url or "(unset)"),
 ]
-if web_url is None and isinstance(web_url_raw, str) and web_url_raw.strip():
+if web_url is None and isinstance(web_url_raw, str) and js_trim(web_url_raw):
     # Said out loud: a dropped value looks exactly like an unset one in the
     # app, and "my sign-in email has no link" is a hard symptom to trace back
     # to a typo'd origin.

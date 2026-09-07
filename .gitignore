@@ -8,11 +8,12 @@ build/
 .swiftpm/
 Package.resolved
 
-# Codegen output — `swift-bao-codegen` regenerates these from
-# `models.toml` via the SPM plugin and via `run-ios.sh`. Ignore the
-# emitted .swift files but track the directory itself (via its README)
-# so a fresh clone has the path Package.swift's `exclude:` references.
-Sources/PrimitiveAppTemplate/Models/Generated/*.swift
+# NOTE: nothing generated is ignored (#3078). Generated code is code — the
+# model types, the workflow factories and the database types are all committed,
+# reviewed and tested like any other source, and every build path regenerates
+# them into the working tree, so a schema change shows up as a diff you commit
+# with the change. `primitive.json` below is the exception that proves the
+# rule: it is a per-environment build product, not generated code.
 
 # macOS
 .DS_Store

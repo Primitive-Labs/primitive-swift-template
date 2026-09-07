@@ -9,8 +9,10 @@
 /* Begin PBXBuildFile section */
 		0E8994141C59D43CA56462CC /* TemplateAppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C934310B61B44B705E1BADC3 /* TemplateAppState.swift */; };
 		120B6E381F80C5FB42F5011F /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 135CFAE383816AA82D2E7ABC /* ContentView.swift */; };
+		1521DD7DD5C40368D75CAEF8 /* GeneratedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64602A5999FED452D08D1C8C /* GeneratedModels.swift */; };
 		331878111FF701AEEFB9FCD7 /* TransientErrorToast.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C31B7DDF07F0DE1943537DC /* TransientErrorToast.swift */; };
 		3DAAD14B25D20A73792BBD26 /* TransientErrorToast.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C31B7DDF07F0DE1943537DC /* TransientErrorToast.swift */; };
+		44FEDD5CDAD051B03ADDA112 /* GeneratedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64602A5999FED452D08D1C8C /* GeneratedModels.swift */; };
 		78105CFE4C34EB6474CF630C /* TemplateAppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C934310B61B44B705E1BADC3 /* TemplateAppState.swift */; };
 		9EB87E8D302E544E4F7A9EEF /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 135CFAE383816AA82D2E7ABC /* ContentView.swift */; };
 		A91E5E9DDA71ED6CC05DEE8C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 145FA2287630E2F15774810F /* Assets.xcassets */; };
@@ -27,6 +29,7 @@
 		135CFAE383816AA82D2E7ABC /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		145FA2287630E2F15774810F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		22D4EDF4ABD3438AF6ED5C83 /* primitive.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = primitive.json; sourceTree = "<group>"; };
+		64602A5999FED452D08D1C8C /* GeneratedModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneratedModels.swift; sourceTree = "<group>"; };
 		8C31B7DDF07F0DE1943537DC /* TransientErrorToast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransientErrorToast.swift; sourceTree = "<group>"; };
 		9814C93D1BCC3782D1267EF2 /* PrimitiveAppTemplate.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PrimitiveAppTemplate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		ADCCB791BA52ED925B364656 /* PrimitiveAppTemplate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PrimitiveAppTemplate.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -72,11 +75,28 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
+		9BE20119DBBF8AB8CB31FC0A /* Generated */ = {
+			isa = PBXGroup;
+			children = (
+				64602A5999FED452D08D1C8C /* GeneratedModels.swift */,
+			);
+			path = Generated;
+			sourceTree = "<group>";
+		};
+		AF5D95645D92B75804072D46 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				9BE20119DBBF8AB8CB31FC0A /* Generated */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
 		D368A51ECD08658579BAA4A9 /* PrimitiveAppTemplate */ = {
 			isa = PBXGroup;
 			children = (
 				D19C365250FD7348EB25D348 /* PrimitiveAppTemplateApp.swift */,
 				C934310B61B44B705E1BADC3 /* TemplateAppState.swift */,
+				AF5D95645D92B75804072D46 /* Models */,
 				898260CA33E2084A93EE1E01 /* Views */,
 			);
 			name = PrimitiveAppTemplate;
@@ -93,13 +113,6 @@
 			);
 			sourceTree = "<group>";
 		};
-		"TEMP_AD2F5CDA-EFA1-4E9C-9373-357D4BCF094F" /* Models */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = Models;
-			sourceTree = "<group>";
-		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -107,7 +120,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = F59C74D85510D8329FCF729E /* Build configuration list for PBXNativeTarget "PrimitiveAppTemplate_macOS" */;
 			buildPhases = (
-				F0EC00AAF227FF67D91463C0 /* Generate models from models.toml */,
+				E4F7E571B8AF66D9E748CCD8 /* Generate code from schemas */,
 				FF7832C1E93960AF032811E4 /* Resolve Primitive environment */,
 				4F875E489A817EBCAD69719D /* Sources */,
 				F50EC587FABFF0A734104C84 /* Resources */,
@@ -129,7 +142,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 0D9537BE88CB186AF7A6775A /* Build configuration list for PBXNativeTarget "PrimitiveAppTemplate_iOS" */;
 			buildPhases = (
-				6A3D5601CECA9C72A1719836 /* Generate models from models.toml */,
+				C89F4E3646417CACAA0F4999 /* Generate code from schemas */,
 				93D811AC31EFDA697E3CF86E /* Resolve Primitive environment */,
 				752F8F59E7BDE108CE2C7AC0 /* Sources */,
 				27EFFBE3B361537AF7648805 /* Resources */,
@@ -212,26 +225,6 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		6A3D5601CECA9C72A1719836 /* Generate models from models.toml */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-				"$(SRCROOT)/Sources/PrimitiveAppTemplate/Models/models.toml",
-			);
-			name = "Generate models from models.toml";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(DERIVED_FILE_DIR)/models-codegen.stamp",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "bash \"$SRCROOT/scripts/generate-models.sh\" --verify-project";
-		};
 		93D811AC31EFDA697E3CF86E /* Resolve Primitive environment */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -255,25 +248,59 @@
 			shellPath = /bin/sh;
 			shellScript = "bash \"$SRCROOT/scripts/resolve-primitive-config.sh\"";
 		};
-		F0EC00AAF227FF67D91463C0 /* Generate models from models.toml */ = {
+		C89F4E3646417CACAA0F4999 /* Generate code from schemas */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			inputFileListPaths = (
+				"$(SRCROOT)/scripts/codegen-inputs.xcfilelist",
 			);
 			inputPaths = (
+				"$(SRCROOT)/scripts/codegen.sh",
+				"$(SRCROOT)/scripts/generate-models.sh",
+				"$(SRCROOT)/scripts/codegen-env.sh",
+				"$(SRCROOT)/scripts/verify-generated-project.sh",
 				"$(SRCROOT)/Sources/PrimitiveAppTemplate/Models/models.toml",
 			);
-			name = "Generate models from models.toml";
+			name = "Generate code from schemas";
 			outputFileListPaths = (
+				"$(SRCROOT)/scripts/codegen-outputs.xcfilelist",
 			);
 			outputPaths = (
-				"$(DERIVED_FILE_DIR)/models-codegen.stamp",
+				"$(DERIVED_FILE_DIR)/codegen.stamp",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "bash \"$SRCROOT/scripts/generate-models.sh\" --verify-project";
+			shellScript = "bash \"$SRCROOT/scripts/codegen.sh\" --verify-project";
+		};
+		E4F7E571B8AF66D9E748CCD8 /* Generate code from schemas */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"$(SRCROOT)/scripts/codegen-inputs.xcfilelist",
+			);
+			inputPaths = (
+				"$(SRCROOT)/scripts/codegen.sh",
+				"$(SRCROOT)/scripts/generate-models.sh",
+				"$(SRCROOT)/scripts/codegen-env.sh",
+				"$(SRCROOT)/scripts/verify-generated-project.sh",
+				"$(SRCROOT)/Sources/PrimitiveAppTemplate/Models/models.toml",
+			);
+			name = "Generate code from schemas";
+			outputFileListPaths = (
+				"$(SRCROOT)/scripts/codegen-outputs.xcfilelist",
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/codegen.stamp",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "bash \"$SRCROOT/scripts/codegen.sh\" --verify-project";
 		};
 		FF7832C1E93960AF032811E4 /* Resolve Primitive environment */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -306,6 +333,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				120B6E381F80C5FB42F5011F /* ContentView.swift in Sources */,
+				44FEDD5CDAD051B03ADDA112 /* GeneratedModels.swift in Sources */,
 				A992A475798C9E1AD8F93786 /* PrimitiveAppTemplateApp.swift in Sources */,
 				0E8994141C59D43CA56462CC /* TemplateAppState.swift in Sources */,
 				331878111FF701AEEFB9FCD7 /* TransientErrorToast.swift in Sources */,
@@ -317,6 +345,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				9EB87E8D302E544E4F7A9EEF /* ContentView.swift in Sources */,
+				1521DD7DD5C40368D75CAEF8 /* GeneratedModels.swift in Sources */,
 				DB584A6C891EA9C928A9DFC5 /* PrimitiveAppTemplateApp.swift in Sources */,
 				78105CFE4C34EB6474CF630C /* TemplateAppState.swift in Sources */,
 				3DAAD14B25D20A73792BBD26 /* TransientErrorToast.swift in Sources */,

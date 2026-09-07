@@ -50,15 +50,52 @@ targets:
     # button, a bare `xcodebuild` and CI all compiled whatever structs the
     # last `./run-ios.sh` happened to leave behind (#2886).
     #
-    # `models.toml` in, a stamp out: with both declared, Xcode's dependency
-    # analysis skips the phase entirely while the schema is untouched, so a
-    # normal incremental build pays nothing for it.
+    # ALL THREE generated classes, on EVERY Xcode entry point (#3078) — Run,
+    # Profile, Archive, a bare `xcodebuild` on a fresh clone. The phase runs
+    # `scripts/codegen.sh`, the same entry point every scripted build path uses,
+    # so no entry point regenerates a different subset from another.
+    #
+    # `basedOnDependencyAnalysis: false` — it runs on every build, on purpose.
+    # Dependency analysis skipped it whenever `models.toml` was untouched, so an
+    # upgraded generator or CLI regenerated nothing; and the file lists below are
+    # refreshed BY this phase, so they describe the previous build. Always
+    # running is what makes that one-build lag harmless.
+    #
+    # What it costs: measured at ~0.9s on an incremental build of a fully-synced
+    # app (models plus workflow and database TOMLs in the selected environment)
+    # with nothing changed — a warm `swift run` of the model codegen plus two
+    # CLI subprocess launches. An app with nothing synced pays only the first.
+    #
+    # The declared I/O is ordering and hygiene, not a sandbox workaround: what a
+    # codegen reads and writes depends on the app's configuration — which
+    # schema, which environment, which synced TOMLs — so the config-dependent
+    # halves are declared through committed `.xcfilelist` files that
+    # `codegen.sh` rewrites. File-list PATHS are what the project embeds, so the
+    # declaration stays valid while the contents change. The scripts themselves
+    # are static inputs: `bash <script>` READS them out of the source tree.
+    #
+    # `$(DERIVED_FILE_DIR)/codegen.stamp` is written by `codegen.sh` itself, and
+    # only after every generator, the list refresh and the verification have
+    # succeeded — no failure path may mark the phase clean.
     preBuildScripts:
-      - name: Generate models from models.toml
-        basedOnDependencyAnalysis: true
-        inputFiles: [$(SRCROOT)/Sources/PrimitiveAppTemplate/Models/models.toml]
-        outputFiles: [$(DERIVED_FILE_DIR)/models-codegen.stamp]
-        script: bash "$SRCROOT/scripts/generate-models.sh" --verify-project
+      - name: Generate code from schemas
+        basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(SRCROOT)/scripts/codegen.sh
+          - $(SRCROOT)/scripts/generate-models.sh
+          - $(SRCROOT)/scripts/codegen-env.sh
+          - $(SRCROOT)/scripts/verify-generated-project.sh
+          # The schema, statically as well as in the generated list: it is the
+          # one input that always exists, and `primitive init` rewrites this
+          # exact spelling when a composed repository moves the schema above the
+          # client (#2890).
+          - $(SRCROOT)/Sources/PrimitiveAppTemplate/Models/models.toml
+        inputFileLists:
+          - $(SRCROOT)/scripts/codegen-inputs.xcfilelist
+        outputFileLists:
+          - $(SRCROOT)/scripts/codegen-outputs.xcfilelist
+        outputFiles: [$(DERIVED_FILE_DIR)/codegen.stamp]
+        script: bash "$SRCROOT/scripts/codegen.sh" --verify-project
       # Re-resolve primitive.json on EVERY build, before Copy Bundle Resources
       # runs. Building straight from Xcode (Run, Profile, Archive) must pick up
       # the current `primitive env use` selection — a phase that could be
