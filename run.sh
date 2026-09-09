@@ -24,7 +24,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# primitive.json is generated from .primitive/config.json — the one place the
+# primitive.json is generated from primitive/config.json — the one place the
 # backend URL and app ID are typed (#2873). build.sh copies it into the bundle;
 # `swift run` reads it from the app root.
 bash scripts/resolve-primitive-config.sh

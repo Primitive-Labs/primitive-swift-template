@@ -2,7 +2,7 @@
 # Generate primitive.json from the selected Primitive environment (#2873).
 #
 # `primitive.json` is a BUILD PRODUCT, not a tracked file. The backend URL and
-# app ID are typed once, in `.primitive/config.json`, and this script writes
+# app ID are typed once, in `primitive/config.json`, and this script writes
 # the selected environment's values into the flat shape
 # `PrimitiveCredentials.swift` already parses:
 #
@@ -36,9 +36,13 @@
 # $(SRCROOT)/primitive.json, so inside that context this script reads ONLY
 # those and deliberately ignores PRIMITIVE_PROJECT_CONFIG (whose target is by
 # definition undeclared). The shipped template never sets
-# ENABLE_USER_SCRIPT_SANDBOXING.
+# ENABLE_USER_SCRIPT_SANDBOXING, so the walk can also stat the pre-#3153 anchor
+# and refuse it (naming getting-started/cli-project-migration) exactly as the
+# shell path does. Residual gap, accepted and documented: with the sandbox
+# manually enabled the old anchor stats as absent and an unmigrated project gets
+# `missing-config` instead of the migration message.
 #
-# The declared config is $(SRCROOT)/.primitive/config.json in a standalone app,
+# The declared config is $(SRCROOT)/primitive/config.json in a standalone app,
 # and an ancestor's when this client is one of several in one Primitive app —
 # so the Xcode path walks up the same way the shell path does. Undeclared
 # ancestors simply are not readable inside the sandbox, so the walk finds the
@@ -91,17 +95,41 @@ fi
 
 OUTPUT="$APP_ROOT/primitive.json"
 
-# ── locate .primitive/config.json ────────────────────────────────────────────
+# ── the pre-#3153 layout is refused, never read ──────────────────────────────
+# One message, the same one the CLI core and the Vite plugin give, so a project
+# that has not been migrated fails identically wherever it is built from. There
+# is no fallback read of `.primitive/sync/`: a half-migrated project that still
+# built would push one tree and pull the other.
+MIGRATION_GUIDE="getting-started/cli-project-migration"
+
+stale_layout() {
+    fail "stale-layout" \
+        "$1" \
+        "The Primitive configuration tree moved out of the hidden directory: the config" \
+        "is now primitive/config.json and each environment's TOML is at primitive/<env>/," \
+        "while .primitive/ keeps only machine-local state. Nothing is read from either" \
+        "tree until the project is migrated — follow $MIGRATION_GUIDE."
+}
+
+# ── locate primitive/config.json ─────────────────────────────────────────────
 CONFIG_PATH=""
 if [ "$IN_XCODE" = "1" ]; then
     # Declared inputs only. PRIMITIVE_PROJECT_CONFIG is deliberately not read.
     # The walk covers the app that owns several clients, whose config sits
     # above this one; the phase declares whichever file it lands on.
+    # The walk already stats undeclared candidate paths at every ancestor, and
+    # the shipped template never sets ENABLE_USER_SCRIPT_SANDBOXING, so the old
+    # anchor is visible here and the refusal is the same as the shell path's.
+    # Residual gap: with the user-script sandbox manually enabled the old anchor
+    # stats as absent and this falls through to missing-config instead.
     dir="$APP_ROOT"
     while :; do
-        if [ -f "$dir/.primitive/config.json" ]; then
-            CONFIG_PATH="$dir/.primitive/config.json"
+        if [ -f "$dir/primitive/config.json" ]; then
+            CONFIG_PATH="$dir/primitive/config.json"
             break
+        fi
+        if [ -f "$dir/.primitive/config.json" ]; then
+            stale_layout "$dir/.primitive/config.json still exists."
         fi
         parent="$(dirname "$dir")"
         [ "$parent" = "$dir" ] && break
@@ -113,16 +141,21 @@ if [ "$IN_XCODE" = "1" ]; then
             # tree already had primitive.json generated (unsandboxed) by
             # regenerate-project.sh from a fixture. Reaching for that fixture
             # here would be an undeclared read.
-            echo "[primitive-config] No readable .primitive/config.json; keeping the" >&2
+            echo "[primitive-config] No readable primitive/config.json; keeping the" >&2
             echo "[primitive-config] pre-generated primitive.json. Skipping resolution." >&2
             exit 0
         fi
         fail "missing-config" \
-            "No .primitive/config.json under \$SRCROOT or a declared parent, and no pre-generated primitive.json." \
+            "No primitive/config.json under \$SRCROOT or a declared parent, and no pre-generated primitive.json." \
             "Run 'primitive init' in this project, or generate the file first:" \
             "  bash scripts/resolve-primitive-config.sh"
     fi
 elif [ -n "${PRIMITIVE_PROJECT_CONFIG:-}" ]; then
+    # Checked before the file is read: the override bypasses the walk, so
+    # without this it would be the one way past the cutover.
+    if [ "$(basename "$(dirname "$PRIMITIVE_PROJECT_CONFIG")")" = ".primitive" ]; then
+        stale_layout "PRIMITIVE_PROJECT_CONFIG points at $PRIMITIVE_PROJECT_CONFIG, inside a .primitive/ directory."
+    fi
     if [ -f "$PRIMITIVE_PROJECT_CONFIG" ]; then
         CONFIG_PATH="$PRIMITIVE_PROJECT_CONFIG"
     else
@@ -132,9 +165,12 @@ elif [ -n "${PRIMITIVE_PROJECT_CONFIG:-}" ]; then
 else
     dir="$APP_ROOT"
     while :; do
-        if [ -f "$dir/.primitive/config.json" ]; then
-            CONFIG_PATH="$dir/.primitive/config.json"
+        if [ -f "$dir/primitive/config.json" ]; then
+            CONFIG_PATH="$dir/primitive/config.json"
             break
+        fi
+        if [ -f "$dir/.primitive/config.json" ]; then
+            stale_layout "$dir/.primitive/config.json still exists."
         fi
         parent="$(dirname "$dir")"
         [ "$parent" = "$dir" ] && break
@@ -142,16 +178,33 @@ else
     done
     if [ -z "$CONFIG_PATH" ]; then
         fail "missing-config" \
-            "No .primitive/config.json in $APP_ROOT or any parent directory." \
+            "No primitive/config.json in $APP_ROOT or any parent directory." \
             "It is the single source of truth for the backend URL and app ID." \
             "Run 'primitive init' to create one, or 'primitive env add <name> --api-url ... --app-id ...'."
     fi
 fi
 
-LOCAL_PATH="$(dirname "$CONFIG_PATH")/local.json"
+# Machine-local state lives under the PROJECT ROOT's `.primitive/`, not beside
+# the committed config (#3153). The root is the parent of `primitive/`, or the
+# containing directory for a bare PRIMITIVE_PROJECT_CONFIG fixture.
+CONFIG_DIR="$(dirname "$CONFIG_PATH")"
+if [ "$(basename "$CONFIG_DIR")" = "primitive" ]; then
+    PROJECT_ROOT_DIR="$(dirname "$CONFIG_DIR")"
+else
+    PROJECT_ROOT_DIR="$CONFIG_DIR"
+fi
+LOCAL_PATH="$PROJECT_ROOT_DIR/.primitive/local.json"
+
+# Half-migrated: the new anchor is here, but the old tree survives beside it.
+if [ -d "$PROJECT_ROOT_DIR/.primitive/sync" ]; then
+    stale_layout "$PROJECT_ROOT_DIR/.primitive/sync still exists."
+fi
+if [ -f "$PROJECT_ROOT_DIR/.primitive/config.json" ]; then
+    stale_layout "$PROJECT_ROOT_DIR/.primitive/config.json still exists."
+fi
 
 if ! command -v python3 >/dev/null 2>&1; then
-    fail "missing-config" "python3 is required to read .primitive/config.json."
+    fail "missing-config" "python3 is required to read primitive/config.json."
 fi
 
 # ── resolve and write ────────────────────────────────────────────────────────
@@ -288,7 +341,7 @@ def missing_app_id_message(name):
     return (
         'Environment "%s" in %s has no "appId". '
         "Every environment names exactly one app -- add \"appId\": \"<app-id>\" to that "
-        "environment in .primitive/config.json." % (name, config_path)
+        "environment in primitive/config.json." % (name, config_path)
     )
 
 

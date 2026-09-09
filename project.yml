@@ -37,7 +37,7 @@ targets:
           # .app — harmless but wasteful.
           - "**/Models/Generated/README.md"
       # A BUILD PRODUCT, not a tracked file: generated from the selected
-      # Primitive environment in .primitive/config.json by the pre-build phase
+      # Primitive environment in primitive/config.json by the pre-build phase
       # below (#2873). The path is non-optional to xcodegen, which is why
       # scripts/regenerate-project.sh generates it before running xcodegen.
       - path: primitive.json
@@ -119,7 +119,7 @@ targets:
         basedOnDependencyAnalysis: false
         inputFiles:
           - $(SRCROOT)/scripts/resolve-primitive-config.sh
-          - $(SRCROOT)/.primitive/config.json
+          - $(SRCROOT)/primitive/config.json
           - $(SRCROOT)/.primitive/local.json
         outputFiles:
           - $(SRCROOT)/primitive.json

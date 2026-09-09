@@ -180,7 +180,7 @@ resolve_cli() {
         fi
     fi
 
-    echo "Error: this app has synced $1 under .primitive/sync/, but no \`primitive\` CLI could be found." >&2
+    echo "Error: this app has synced $1 under primitive/<env>/, but no \`primitive\` CLI could be found." >&2
     echo "  Install it with: pnpm add -g primitive-admin   (or: npm install -g primitive-admin)" >&2
     echo "  Or install node, so this build can run: npx -y primitive-admin@${pin:-<pin>}" >&2
     echo "  Or point PRIMITIVE_CLI at the executable." >&2
@@ -254,14 +254,14 @@ DERIVED_FILE_DIR="" bash scripts/generate-models.sh
 # Workflow factories
 # ────────────────────────────────────────────────────────────────────────────
 # Only when this app has synced workflows: a freshly scaffolded app has no
-# `<project root>/.primitive/sync/<env>/<app>/workflows/*.toml` at all, and
+# `<project root>/primitive/<env>/workflows/*.toml` at all, and
 # `primitive workflows codegen` exits non-zero with "No workflows/*.toml files
 # found" — which must not fail a build that has nothing to generate. Same guard
 # shape the Vue template's `codegen` script uses.
 #
-# The sync tree sits beside `.primitive/config.json`, which is NOT always this
+# The tree sits beside `primitive/config.json`, which is NOT always this
 # directory: one Primitive app can have several clients (this one and a web
-# client in a sibling directory), and then the project config and its sync
+# client in a sibling directory), and then the project config and its
 # export live at the repo root. So walk up for it, the way git finds `.git` and
 # the way the CLI resolves the project — a standalone app's nearest ancestor is
 # itself, which is the old behavior exactly.
@@ -271,7 +271,7 @@ DERIVED_FILE_DIR="" bash scripts/generate-models.sh
 PROJECT_ROOT=""
 dir="$(pwd)"
 while :; do
-    if [ -f "$dir/.primitive/config.json" ]; then
+    if [ -f "$dir/primitive/config.json" ]; then
         PROJECT_ROOT="$dir"
         break
     fi
@@ -287,34 +287,29 @@ done
 # including Xcode's Run button, which now runs this script — from failing on an
 # environment it was never asked about.
 RESOLVED_ENV=""
-RESOLVED_APP_ID=""
 if [ -n "$PROJECT_ROOT" ]; then
     SELECTION="$(bash scripts/codegen-env.sh \
-        "$PROJECT_ROOT/.primitive/config.json" \
+        "$PROJECT_ROOT/primitive/config.json" \
         "$PROJECT_ROOT/.primitive/local.json")"
     RESOLVED_ENV="$(printf '%s\n' "$SELECTION" | sed -n '1p')"
-    RESOLVED_APP_ID="$(printf '%s\n' "$SELECTION" | sed -n '2p')"
 fi
 
-# True when the SELECTED environment's app slot has this artifact class synced.
+# True when the SELECTED environment has this artifact class synced.
 #
-# The two fallbacks are deliberate. An environment with no `appId` scopes to the
-# environment and accepts any app slot inside it. And when no single environment
-# resolves at all — several defined, none selected — the guard widens back to
-# every environment, so an app that really does have TOMLs invokes the CLI and
-# gets the CLI's own resolver error, in the CLI's words, rather than a silent
-# skip of work the developer asked for.
+# The fallback is deliberate: when no single environment resolves at all —
+# several defined, none selected — the guard widens back to every environment,
+# so an app that really does have TOMLs invokes the CLI and gets the CLI's own
+# resolver error, in the CLI's words, rather than a silent skip of work the
+# developer asked for. `primitive/config.json` is a file, so the widened glob
+# `primitive/*/<kind>/*.toml` never reads it as an environment.
 synced_tomls() {
     local kind="$1"
     [ -n "$PROJECT_ROOT" ] || return 0
-    if [ -n "$RESOLVED_ENV" ] && [ -n "$RESOLVED_APP_ID" ]; then
-        ls "$PROJECT_ROOT/.primitive/sync/$RESOLVED_ENV/$RESOLVED_APP_ID/$kind"/*.toml \
-            2>/dev/null || true
-    elif [ -n "$RESOLVED_ENV" ]; then
-        ls "$PROJECT_ROOT/.primitive/sync/$RESOLVED_ENV"/*/"$kind"/*.toml \
+    if [ -n "$RESOLVED_ENV" ]; then
+        ls "$PROJECT_ROOT/primitive/$RESOLVED_ENV/$kind"/*.toml \
             2>/dev/null || true
     else
-        ls "$PROJECT_ROOT/.primitive/sync"/*/*/"$kind"/*.toml 2>/dev/null || true
+        ls "$PROJECT_ROOT/primitive"/*/"$kind"/*.toml 2>/dev/null || true
     fi
 }
 
@@ -338,7 +333,7 @@ fi
 # the models, and rewritten here on every build path.
 #
 # Guarded exactly like the workflow half: with no synced
-# `.primitive/sync/<env>/<app>/database-type-configs/*.toml`, `primitive
+# `primitive/<env>/database-type-configs/*.toml`, `primitive
 # databases codegen` exits non-zero with "No database-type-configs/*.toml files
 # found", which must not fail a build that has nothing to generate.
 if has_synced database-type-configs; then
@@ -360,7 +355,7 @@ fi
 # stay valid while the lists change.
 #
 # Entries are `$(SRCROOT)`-relative, so a client whose project config lives at an
-# ancestor repository root spells it `$(SRCROOT)/../.primitive/config.json`.
+# ancestor repository root spells it `$(SRCROOT)/../primitive/config.json`.
 # Sorted, so two consecutive runs write identical bytes and the redundant second
 # pass on the project-regenerating paths leaves no diff.
 
@@ -388,7 +383,7 @@ print("$(SRCROOT)/" + os.path.relpath(target, base))
 # a group whose last command is a `[ -f … ]` that came out false.
 codegen_inputs() {
     if [ -n "$PROJECT_ROOT" ]; then
-        srcroot_relative "$PROJECT_ROOT/.primitive/config.json"
+        srcroot_relative "$PROJECT_ROOT/primitive/config.json"
         # Declared whether or not it exists: `primitive env use` creates it, and
         # a phase may only read what was declared before it ran.
         srcroot_relative "$PROJECT_ROOT/.primitive/local.json"

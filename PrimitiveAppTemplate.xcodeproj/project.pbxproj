@@ -235,7 +235,7 @@
 			);
 			inputPaths = (
 				"$(SRCROOT)/scripts/resolve-primitive-config.sh",
-				"$(SRCROOT)/.primitive/config.json",
+				"$(SRCROOT)/primitive/config.json",
 				"$(SRCROOT)/.primitive/local.json",
 			);
 			name = "Resolve Primitive environment";
@@ -312,7 +312,7 @@
 			);
 			inputPaths = (
 				"$(SRCROOT)/scripts/resolve-primitive-config.sh",
-				"$(SRCROOT)/.primitive/config.json",
+				"$(SRCROOT)/primitive/config.json",
 				"$(SRCROOT)/.primitive/local.json",
 			);
 			name = "Resolve Primitive environment";

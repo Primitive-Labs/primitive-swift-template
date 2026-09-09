@@ -1,13 +1,13 @@
 #!/bin/bash
-# Which Primitive environment (and app slot) a codegen run belongs to.
+# Which Primitive environment a codegen run belongs to.
 #
-# Prints two lines on stdout — the environment name, then the app id — and
-# nothing at all when no single environment can be resolved. Always exits 0:
-# "cannot tell" is an answer the caller acts on, not a failure.
+# Prints the environment name on stdout, and nothing at all when no single
+# environment can be resolved. Always exits 0: "cannot tell" is an answer the
+# caller acts on, not a failure.
 #
 # WHY this exists (#3078). `scripts/codegen.sh` guards each CLI-driven codegen
 # on whether this app has that artifact class synced. The guard used to glob
-# EVERY environment (`.primitive/sync/*/*/workflows/*.toml`) while the CLI it
+# EVERY environment (`primitive/*/workflows/*.toml`) while the CLI it
 # then invokes resolves exactly ONE and errors when that one's directory is
 # empty. An app with workflows synced under `alpha` while `dev` is selected
 # therefore invoked the CLI for `dev` and failed. That was survivable while
@@ -94,9 +94,7 @@ else:
 if not chosen:
     sys.exit(0)
 
-app_id = environments[chosen].get("appId")
+# The environment is the whole answer: the tree path no longer carries an app
+# id (#3153), because the environment already names exactly one app (#3152).
 print(chosen)
-# An environment with no usable appId still scopes the guard to that
-# environment; the caller then accepts any app slot inside it.
-print(app_id if isinstance(app_id, str) else "")
 PYTHON
