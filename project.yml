@@ -114,6 +114,16 @@ targets:
       #
       # The resolver script itself is an input: `bash <script>` READS it out of
       # the source tree, which the sandbox denies unless it is declared.
+      #
+      # `.primitive/config.json` is the PRE-#3153 anchor. The script never
+      # reads it — it stats it and refuses the build, naming the migration
+      # page. Declared so that stat is permitted by contract with the sandbox
+      # on: the profile denies `file-read*` under $SRCROOT and re-allows each
+      # declared input, and an undeclared anchor is only as visible as that
+      # profile happens to make it — when it is not, an unmigrated project is
+      # told its configuration is missing when the file is merely in the old
+      # place (#3343). A migrated project has no such file, exactly as it may
+      # have no `.primitive/local.json`.
       - name: Resolve Primitive environment
         script: bash "$SRCROOT/scripts/resolve-primitive-config.sh"
         basedOnDependencyAnalysis: false
@@ -121,6 +131,7 @@ targets:
           - $(SRCROOT)/scripts/resolve-primitive-config.sh
           - $(SRCROOT)/primitive/config.json
           - $(SRCROOT)/.primitive/local.json
+          - $(SRCROOT)/.primitive/config.json
         outputFiles:
           - $(SRCROOT)/primitive.json
     entitlements:

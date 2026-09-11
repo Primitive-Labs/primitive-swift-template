@@ -35,12 +35,21 @@
 # declares the project config, this machine's selection beside it, and
 # $(SRCROOT)/primitive.json, so inside that context this script reads ONLY
 # those and deliberately ignores PRIMITIVE_PROJECT_CONFIG (whose target is by
-# definition undeclared). The shipped template never sets
-# ENABLE_USER_SCRIPT_SANDBOXING, so the walk can also stat the pre-#3153 anchor
-# and refuse it (naming getting-started/cli-project-migration) exactly as the
-# shell path does. Residual gap, accepted and documented: with the sandbox
-# manually enabled the old anchor stats as absent and an unmigrated project gets
-# `missing-config` instead of the migration message.
+# definition undeclared).
+#
+# The pre-#3153 anchor, $(SRCROOT)/.primitive/config.json, is declared as an
+# input too — not to read it (nothing is ever read from the old tree) but so
+# the walk may STAT it and refuse the build naming
+# getting-started/cli-project-migration, exactly as the shell path does. The
+# shipped template never sets ENABLE_USER_SCRIPT_SANDBOXING, but it is Xcode's
+# default for new targets and a developer may switch it on. The profile Xcode
+# writes for the phase denies `file-read*` on the whole $SRCROOT subtree and
+# re-allows each declared input by literal path; whether a bare stat of an
+# UNDECLARED path still answers is a property of that profile (on Xcode 26.4
+# it did; reading the file's bytes did not), not a contract. Declaring the
+# anchor is the contract (#3343): the refusal no longer depends on the
+# profile's shape, and the message below covers an anchor this phase did not
+# declare.
 #
 # The declared config is $(SRCROOT)/primitive/config.json in a standalone app,
 # and an ancestor's when this client is one of several in one Primitive app —
@@ -117,11 +126,12 @@ if [ "$IN_XCODE" = "1" ]; then
     # Declared inputs only. PRIMITIVE_PROJECT_CONFIG is deliberately not read.
     # The walk covers the app that owns several clients, whose config sits
     # above this one; the phase declares whichever file it lands on.
-    # The walk already stats undeclared candidate paths at every ancestor, and
-    # the shipped template never sets ENABLE_USER_SCRIPT_SANDBOXING, so the old
-    # anchor is visible here and the refusal is the same as the shell path's.
-    # Residual gap: with the user-script sandbox manually enabled the old anchor
-    # stats as absent and this falls through to missing-config instead.
+    # The old anchor beside $SRCROOT is a declared input (#3343), so with the
+    # user-script sandbox on it may be stat'd and the refusal is the same as
+    # the shell path's. An old anchor the phase did NOT declare — an
+    # ancestor's, or a project whose .xcodeproj predates the declaration — is
+    # only as visible as the sandbox profile happens to make it, and when it
+    # is not, this falls through to missing-config below.
     dir="$APP_ROOT"
     while :; do
         if [ -f "$dir/primitive/config.json" ]; then
@@ -145,9 +155,17 @@ if [ "$IN_XCODE" = "1" ]; then
             echo "[primitive-config] pre-generated primitive.json. Skipping resolution." >&2
             exit 0
         fi
+        # Inside the sandbox "never initialized" and "still on the pre-#3153
+        # layout at a path this phase did not declare" can look the same, so
+        # the text names the second reason and the page rather than sending the
+        # developer after a file that is present, merely in the old place.
         fail "missing-config" \
             "No primitive/config.json under \$SRCROOT or a declared parent, and no pre-generated primitive.json." \
-            "Run 'primitive init' in this project, or generate the file first:" \
+            "Either this project was never initialized — run 'primitive init' in it — or it is still on" \
+            "the pre-#3153 layout (.primitive/config.json), which this phase may not see from inside" \
+            "Xcode's user-script sandbox unless that path is a declared input. The configuration tree" \
+            "moved to primitive/config.json; nothing is read from the old tree — follow $MIGRATION_GUIDE." \
+            "To generate the file outside Xcode first:" \
             "  bash scripts/resolve-primitive-config.sh"
     fi
 elif [ -n "${PRIMITIVE_PROJECT_CONFIG:-}" ]; then
@@ -177,10 +195,12 @@ else
         dir="$parent"
     done
     if [ -z "$CONFIG_PATH" ]; then
+        # The remedy names `primitive init` and nothing else (#3154): `env add`
+        # now requires a project config to already exist.
         fail "missing-config" \
             "No primitive/config.json in $APP_ROOT or any parent directory." \
             "It is the single source of truth for the backend URL and app ID." \
-            "Run 'primitive init' to create one, or 'primitive env add <name> --api-url ... --app-id ...'."
+            "Run 'primitive init' to create one."
     fi
 fi
 

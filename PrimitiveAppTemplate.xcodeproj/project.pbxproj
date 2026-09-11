@@ -237,6 +237,7 @@
 				"$(SRCROOT)/scripts/resolve-primitive-config.sh",
 				"$(SRCROOT)/primitive/config.json",
 				"$(SRCROOT)/.primitive/local.json",
+				"$(SRCROOT)/.primitive/config.json",
 			);
 			name = "Resolve Primitive environment";
 			outputFileListPaths = (
@@ -314,6 +315,7 @@
 				"$(SRCROOT)/scripts/resolve-primitive-config.sh",
 				"$(SRCROOT)/primitive/config.json",
 				"$(SRCROOT)/.primitive/local.json",
+				"$(SRCROOT)/.primitive/config.json",
 			);
 			name = "Resolve Primitive environment";
 			outputFileListPaths = (
