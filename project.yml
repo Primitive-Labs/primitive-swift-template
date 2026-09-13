@@ -116,8 +116,8 @@ targets:
       # the source tree, which the sandbox denies unless it is declared.
       #
       # `.primitive/config.json` is the PRE-#3153 anchor. The script never
-      # reads it — it stats it and refuses the build, naming the migration
-      # page. Declared so that stat is permitted by contract with the sandbox
+      # reads it — it stats it and refuses the build, naming both anchors.
+      # Declared so that stat is permitted by contract with the sandbox
       # on: the profile denies `file-read*` under $SRCROOT and re-allows each
       # declared input, and an undeclared anchor is only as visible as that
       # profile happens to make it — when it is not, an unmigrated project is

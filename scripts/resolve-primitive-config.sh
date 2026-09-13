@@ -39,8 +39,8 @@
 #
 # The pre-#3153 anchor, $(SRCROOT)/.primitive/config.json, is declared as an
 # input too — not to read it (nothing is ever read from the old tree) but so
-# the walk may STAT it and refuse the build naming
-# getting-started/cli-project-migration, exactly as the shell path does. The
+# the walk may STAT it and refuse the build naming both anchors, exactly as
+# the shell path does. The
 # shipped template never sets ENABLE_USER_SCRIPT_SANDBOXING, but it is Xcode's
 # default for new targets and a developer may switch it on. The profile Xcode
 # writes for the phase denies `file-read*` on the whole $SRCROOT subtree and
@@ -104,20 +104,17 @@ fi
 
 OUTPUT="$APP_ROOT/primitive.json"
 
-# ── the pre-#3153 layout is refused, never read ──────────────────────────────
-# One message, the same one the CLI core and the Vite plugin give, so a project
-# that has not been migrated fails identically wherever it is built from. There
-# is no fallback read of `.primitive/sync/`: a half-migrated project that still
-# built would push one tree and pull the other.
-MIGRATION_GUIDE="getting-started/cli-project-migration"
-
-stale_layout() {
+# ── an unmigrated project is refused, never read ─────────────────────────────
+# A `.primitive/config.json` with no `primitive/config.json` beside it: the one
+# message the CLI core and the Vite plugin give, so a project that never
+# migrated fails identically wherever it is built from. One sentence naming the
+# file found and the file expected; no document (the migration page was never
+# published, #3392). Anything else left under `.primitive/` beside a migrated
+# tree is machine-local junk and is ignored.
+#   $1 the old anchor that was found; $2 the new anchor that is expected
+unmigrated_project() {
     fail "stale-layout" \
-        "$1" \
-        "The Primitive configuration tree moved out of the hidden directory: the config" \
-        "is now primitive/config.json and each environment's TOML is at primitive/<env>/," \
-        "while .primitive/ keeps only machine-local state. Nothing is read from either" \
-        "tree until the project is migrated — follow $MIGRATION_GUIDE."
+        "Found $1 but no $2: this project still uses the retired layout under .primitive/, which is never read."
 }
 
 # ── locate primitive/config.json ─────────────────────────────────────────────
@@ -139,7 +136,7 @@ if [ "$IN_XCODE" = "1" ]; then
             break
         fi
         if [ -f "$dir/.primitive/config.json" ]; then
-            stale_layout "$dir/.primitive/config.json still exists."
+            unmigrated_project "$dir/.primitive/config.json" "$dir/primitive/config.json"
         fi
         parent="$(dirname "$dir")"
         [ "$parent" = "$dir" ] && break
@@ -157,22 +154,24 @@ if [ "$IN_XCODE" = "1" ]; then
         fi
         # Inside the sandbox "never initialized" and "still on the pre-#3153
         # layout at a path this phase did not declare" can look the same, so
-        # the text names the second reason and the page rather than sending the
-        # developer after a file that is present, merely in the old place.
+        # the text names the second reason and the old anchor rather than
+        # sending the developer after a file that is present, merely in the
+        # old place.
         fail "missing-config" \
             "No primitive/config.json under \$SRCROOT or a declared parent, and no pre-generated primitive.json." \
             "Either this project was never initialized — run 'primitive init' in it — or it is still on" \
             "the pre-#3153 layout (.primitive/config.json), which this phase may not see from inside" \
             "Xcode's user-script sandbox unless that path is a declared input. The configuration tree" \
-            "moved to primitive/config.json; nothing is read from the old tree — follow $MIGRATION_GUIDE." \
+            "lives at primitive/config.json; nothing is read from the old one." \
             "To generate the file outside Xcode first:" \
             "  bash scripts/resolve-primitive-config.sh"
     fi
 elif [ -n "${PRIMITIVE_PROJECT_CONFIG:-}" ]; then
     # Checked before the file is read: the override bypasses the walk, so
-    # without this it would be the one way past the cutover.
+    # without this it would be the one way past the cutover. An override
+    # inside a `.primitive/` directory IS the old layout, named explicitly.
     if [ "$(basename "$(dirname "$PRIMITIVE_PROJECT_CONFIG")")" = ".primitive" ]; then
-        stale_layout "PRIMITIVE_PROJECT_CONFIG points at $PRIMITIVE_PROJECT_CONFIG, inside a .primitive/ directory."
+        unmigrated_project "$PRIMITIVE_PROJECT_CONFIG" "$(dirname "$(dirname "$PRIMITIVE_PROJECT_CONFIG")")/primitive/config.json"
     fi
     if [ -f "$PRIMITIVE_PROJECT_CONFIG" ]; then
         CONFIG_PATH="$PRIMITIVE_PROJECT_CONFIG"
@@ -188,7 +187,7 @@ else
             break
         fi
         if [ -f "$dir/.primitive/config.json" ]; then
-            stale_layout "$dir/.primitive/config.json still exists."
+            unmigrated_project "$dir/.primitive/config.json" "$dir/primitive/config.json"
         fi
         parent="$(dirname "$dir")"
         [ "$parent" = "$dir" ] && break
@@ -214,14 +213,6 @@ else
     PROJECT_ROOT_DIR="$CONFIG_DIR"
 fi
 LOCAL_PATH="$PROJECT_ROOT_DIR/.primitive/local.json"
-
-# Half-migrated: the new anchor is here, but the old tree survives beside it.
-if [ -d "$PROJECT_ROOT_DIR/.primitive/sync" ]; then
-    stale_layout "$PROJECT_ROOT_DIR/.primitive/sync still exists."
-fi
-if [ -f "$PROJECT_ROOT_DIR/.primitive/config.json" ]; then
-    stale_layout "$PROJECT_ROOT_DIR/.primitive/config.json still exists."
-fi
 
 if ! command -v python3 >/dev/null 2>&1; then
     fail "missing-config" "python3 is required to read primitive/config.json."
