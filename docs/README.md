@@ -24,6 +24,8 @@ primitive-swift-template/
 ├── primitive.json                      ← GENERATED (gitignored) from .primitive/config.json
 ├── project.yml / *.xcodeproj           ← Xcode project (parallel to SPM, both build the same code)
 ├── run.sh / run-ios.sh / build.sh      ← Build helpers
+├── fastlane/                           ← TestFlight + App Store lanes (see Distribution below)
+├── archive.sh                          ← Xcode-account archives (not the TestFlight path — see Distribution)
 ├── scripts/smoke-test.sh               ← Simulator smoke tests (launch + opt-in idb sign-in)
 └── Sources/PrimitiveAppTemplate/
     ├── PrimitiveAppTemplateApp.swift   ← @main entry: creates TemplateAppState, injects it
@@ -132,6 +134,27 @@ Because this is SPM-based, **adding a new `.swift` file is just creating it on d
 Both scenarios run on a simulator dedicated to this app — `Smoke — <bundle id>`, created on first use — rather than whichever device is booted, so two apps built from this template can smoke-test side by side on one machine. Set `PRIMITIVE_SMOKE_SIM` to pick the device by name yourself, or `PRIMITIVE_SMOKE_SIM_BASE` (default `iPhone 17 Pro`) to change the device type it is created from.
 
 `./run-ios.sh` works the same way on a device of its own, `Run — <bundle id>` (`PRIMITIVE_RUN_SIM` and `PRIMITIVE_RUN_SIM_BASE` are the matching knobs), so a smoke run never reinstalls the app out from under the session you are driving by hand, and neither run adopts another app's booted simulator. `./run-ios.sh --sim <name-or-udid>` still targets whatever device you name for one run.
+
+## Distribution
+
+Simulator builds run unsigned. TestFlight, the App Store and device installs need an Apple Developer account ($99/year) and `DEVELOPMENT_TEAM` set in `project.yml` (your Team ID, from [developer.apple.com/account](https://developer.apple.com/account) → Membership Details; every build path regenerates the Xcode project from `project.yml`, so that edit is the whole step).
+
+**TestFlight and the App Store: the fastlane lanes.** The template ships a `Gemfile` and `fastlane/` (`bundle install` once). The iOS lanes sign entirely from an App Store Connect API key — they authenticate the archive with it and fetch your Apple Distribution certificate and App Store provisioning profile through it — so they need **no Apple ID signed into Xcode and no certificate already in your keychain**:
+
+```sh
+cp fastlane/.env.example fastlane/.env   # then fill in ASC_KEY_ID / ASC_ISSUER_ID; save the .p8 as fastlane/api_key.p8
+bundle exec fastlane bump type:patch     # new build number — App Store Connect rejects a repeat
+bundle exec fastlane ios beta            # archive, export, upload to TestFlight
+bundle exec fastlane ios release         # archive, export, upload the App Store build
+```
+
+`ios release` uploads the build to App Store Connect; it does not start review. Finish the version's metadata there and submit it for review by hand — the lane prints that reminder when it succeeds.
+
+The key's role is App Manager (or Admin); `fastlane/.env.example` walks through creating it, and a lane run before it is set up prints the same steps and stops. `bundle exec fastlane lanes` lists the rest (`mac beta`, `mac dmg`, `status`). Never commit `fastlane/api_key.p8` or `fastlane/.env`.
+
+**`./archive.sh {ios|mac|dmg}` is the Xcode-account path.** It archives with Xcode automatic signing, which authenticates through the Apple ID in Xcode → Settings → Accounts; it never reads `fastlane/.env`. On a machine with only the API key configured it fails with `No Accounts` — that is the machine state, not the project, and `bundle exec fastlane ios beta` is the command for it. `dmg` mode builds a Developer ID-signed `.app` for direct macOS distribution (`fastlane mac dmg` also notarizes and staples it).
+
+The full walkthrough — team ID, the API key, registering the app on App Store Connect, CI — is the platform's Deploying guide: `primitive guides get deploying --language swift`.
 
 ## Where to look next
 
