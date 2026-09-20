@@ -94,6 +94,9 @@ fi
 IDB_TARGET=""
 IDB_PORT=""
 IDB_COMPANION_PID=""
+# The DEVELOPER_DIR the companion is started under, resolved once per run by
+# resolve_idb_developer_dir (see there for why it is not simply the active one).
+IDB_DEVELOPER_DIR=""
 
 read_yml_value() {
     awk -v k="$1" 'BEGIN{FS=":"} $1 ~ "^[[:space:]]*"k"[[:space:]]*$" {
@@ -280,6 +283,30 @@ find_free_port() {
 # Run an idb subcommand against the active companion.
 idb_cmd() { idb --companion "$IDB_TARGET" "$@"; }
 
+# Resolve the DEVELOPER_DIR to start the companion under, once per run, into
+# $IDB_DEVELOPER_DIR. Returns non-zero when there is none.
+#
+# `idb_companion` loads SimulatorKit — the framework behind every HID call
+# (`ui tap`, `ui text`, `ui key`) — from
+# `$DEVELOPER_DIR/Library/PrivateFrameworks/SimulatorKit.framework`. Xcode 27
+# keeps it in `Xcode.app/Contents/SharedFrameworks` and ships no
+# `Contents/Developer/Library/PrivateFrameworks` at all, so a companion started
+# under that Xcode reads the accessibility tree happily and fails every tap
+# with "SimulatorKit is required for HID interactions" (#3487).
+# `scripts/idb-developer-dir.sh` answers that with a symlink mirror of the
+# bundle — nothing inside Xcode.app is touched, nothing needs root — and prints
+# the directory to use. On an Xcode that still keeps the framework where idb
+# looks it prints the active developer directory unchanged and builds nothing.
+resolve_idb_developer_dir() {
+    [ -z "$IDB_DEVELOPER_DIR" ] || return 0
+    local resolved
+    # Only the path is captured; the script's own diagnostics go to stderr, so
+    # a failure explains itself in the log above whatever the caller prints.
+    resolved=$(bash scripts/idb-developer-dir.sh) || return 1
+    [ -n "$resolved" ] || return 1
+    IDB_DEVELOPER_DIR="$resolved"
+}
+
 # Start an idb companion for $1 (UDID) on a free port and wait until it
 # answers. When PRIMITIVE_IDB_COMPANION is set, use that instead and start
 # nothing. Registers teardown on script exit.
@@ -290,12 +317,19 @@ start_idb_companion() {
         log "Using caller-managed idb companion at $IDB_TARGET"
         return 0
     fi
+    # Resolved before the companion starts, not after a tap fails: a companion
+    # under the wrong DEVELOPER_DIR serves the AX tree and refuses HID (#3487).
+    # The preflight already reported an unresolvable one, so this is the path
+    # for a caller who reached the scenario another way.
+    resolve_idb_developer_dir \
+        || { fail "no DEVELOPER_DIR for idb_companion (see above); HID would fail"; return 1; }
     trap stop_idb_companion EXIT
     mkdir -p "$PWD/build/smoke"
     IDB_PORT=$(find_free_port)
     IDB_TARGET="localhost:$IDB_PORT"
-    log "Starting idb companion for $udid on $IDB_TARGET..."
-    idb_companion --udid "$udid" --grpc-port "$IDB_PORT" \
+    log "Starting idb companion for $udid on $IDB_TARGET (DEVELOPER_DIR=$IDB_DEVELOPER_DIR)..."
+    DEVELOPER_DIR="$IDB_DEVELOPER_DIR" \
+        idb_companion --udid "$udid" --grpc-port "$IDB_PORT" \
         >"$PWD/build/smoke/idb-companion-$IDB_PORT.log" 2>&1 &
     IDB_COMPANION_PID=$!
     local tries=0
@@ -503,6 +537,30 @@ EOF
 [smoke-test]   the venv's own binary at ~/.local/share/primitive/idb-venv/bin/idb.)
 EOF
         ok=0
+    fi
+
+    # 2b. A DEVELOPER_DIR the companion can load SimulatorKit from. Checked
+    # here because the alternative is discovering it at the first tap — after
+    # the multi-minute boot and build — as `could not tap email field`, with
+    # the real reason (Xcode moved the framework, #3487) buried in the
+    # companion's own log. Skipped for a caller-managed companion: whoever
+    # started it chose its DEVELOPER_DIR, and this machine's Xcode says nothing
+    # about theirs.
+    if [ "$ok" = "1" ] && [ "$need_local_companion" = "1" ]; then
+        if resolve_idb_developer_dir; then
+            log "idb companion DEVELOPER_DIR: $IDB_DEVELOPER_DIR"
+        else
+            fail "ui_signin prerequisite not met: no DEVELOPER_DIR where idb_companion can load SimulatorKit.framework (the reason is in the lines above)."
+            cat >&2 <<'EOF'
+[smoke-test]   Every HID call — tap, type, key — goes through that framework;
+[smoke-test]   reading the accessibility tree does not. That is why this would
+[smoke-test]   otherwise surface as a tap that fails on a simulator which looks
+[smoke-test]   perfectly healthy.
+[smoke-test]   scripts/idb-developer-dir.sh, which reported the problem above,
+[smoke-test]   needs a full Xcode:  xcode-select -p
+EOF
+            ok=0
+        fi
     fi
 
     # 3. Server settings: the test email's base must be whitelisted, OTP must

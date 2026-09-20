@@ -55,7 +55,7 @@ Two dev tools cover different halves of "does my change work," and they pair up:
 
 ```sh
 xcrun simctl list devices booted                   # the booted simulator's UDID
-idb_companion --udid <UDID> --grpc-port 10882 &    # start a companion
+DEVELOPER_DIR="$(bash scripts/idb-developer-dir.sh)" idb_companion --udid <UDID> --grpc-port 10882 &   # start a companion
 idb --companion localhost:10882 ui describe-all    # AX tree; a SwiftUI .accessibilityIdentifier shows up as AXUniqueId
 idb --companion localhost:10882 ui tap <X> <Y>     # tap the center of that element's frame, in integer points
 idb --companion localhost:10882 ui text "hello"    # type into the focused field
@@ -64,6 +64,8 @@ xcrun simctl io booted screenshot /tmp/shot.png    # see what happened
 ```
 
 These ad-hoc commands need `idb` on PATH, which `bash scripts/setup-idb.sh` arranges via `~/.local/bin` (the smoke test finds its client without any PATH change). If `idb` still isn't found after setup, either add the line the script prints — `export PATH="$HOME/.local/bin:$PATH"` — or call the venv binary directly at `~/.local/share/primitive/idb-venv/bin/idb`.
+
+**Start the companion through `scripts/idb-developer-dir.sh`, as above.** `idb_companion` loads SimulatorKit — the framework behind every HID call (`ui tap`, `ui text`, `ui key`) — from `$DEVELOPER_DIR/Library/PrivateFrameworks`, and Xcode 27 moved it to `Xcode.app/Contents/SharedFrameworks`. Start the companion plainly on that Xcode and `describe-all` still works while every tap fails with `SimulatorKit is required for HID interactions: … but it does not exist` (#3487). That script prints a `DEVELOPER_DIR` where the framework is — a symlink mirror of the Xcode bundle, built on first use, nothing written inside `Xcode.app` and no root — and on an older Xcode it prints the active developer directory unchanged. `scripts/smoke-test.sh ui_signin` calls it itself, so the scenario needs no setup beyond `scripts/setup-idb.sh`.
 
 For what the installer does (including the Python 3.12 requirement for `fb-idb`), the `+primitivetest` prerequisite, and the full command reference, read the DevTools guide:
 
