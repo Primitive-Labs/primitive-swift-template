@@ -26,7 +26,7 @@
 
 	  IF THIS APP HAS A WEB COUNTERPART, prefer the https link over the custom
 	  scheme below: add "webUrl": "https://your-web-domain" to the environment
-	  in .primitive/config.json (a bare origin; `primitive env add` takes a
+	  in primitive/config.json (a bare origin; `primitive env add` takes a
 	  web-url option when it CREATES an environment, but cannot edit one that
 	  already exists) and the sign-in email carries
 	  "https://your-web-domain/oauth/callback" instead. That one link

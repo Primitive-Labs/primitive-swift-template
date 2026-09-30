@@ -1,24 +1,37 @@
 #!/bin/bash
-# Archive and export the Primitive template app for distribution.
+# Archive the Primitive template app through Xcode's account session.
 #
 # Usage:
-#   ./archive.sh ios          -- Archive for iOS (TestFlight / App Store)
-#   ./archive.sh mac          -- Archive for macOS (TestFlight / Mac App Store)
+#   ./archive.sh ios          -- Archive an iOS build with Xcode automatic signing and hand it to App Store Connect
+#   ./archive.sh mac          -- Archive a macOS build with Xcode automatic signing and hand it to App Store Connect
 #   ./archive.sh dmg          -- Build a standalone macOS .app (for direct distribution / notarization)
+#
+# The TestFlight path is `bundle exec fastlane ios beta` (docs/README.md,
+# "Distribution"). This script signs through the Apple ID added in Xcode's
+# Accounts pane and never sees the App Store Connect API key, so on a machine
+# set up as fastlane/.env.example prescribes — the key, no Apple ID in Xcode,
+# no distribution certificate — it fails with `No Accounts` (#3416). The beta
+# lane authenticates the archive with that key and fetches the certificate and
+# profile through it (#3008), so it uploads from exactly that machine.
 #
 # Add `--primitive-env <name>` to any of the above to archive against a named
 # Primitive environment instead of the one `primitive env use` selected. The
 # archived bundle carries only that environment's values (#2873).
 #
-# Every mode refuses to archive while the committed generated sources (workflow
-# factories, database types) are out of date — run `bash scripts/codegen.sh`
-# and commit the result first. See the codegen gate below.
+# This is not a special case (#3078): it regenerates and builds like every
+# other path. `scripts/regenerate-project.sh` runs the full codegen — models,
+# workflow factories, database types — before xcodegen scans for sources, and a
+# failing codegen stops the archive. There is no release-time drift check: a
+# schema change shows up as a working-tree diff on the developer's ordinary
+# build, which is where it gets reviewed and committed.
 #
 # Prerequisites:
 #   - Apple Developer account ($99/year)
 #   - Set DEVELOPMENT_TEAM in project.yml to your Team ID (this script regenerates
 #     the Xcode project from project.yml on every run, so no extra step)
-#   - For TestFlight/App Store: app must be registered in App Store Connect
+#   - An Apple ID on that team added in Xcode -> Settings -> Accounts: every
+#     mode signs through it (an App Store Connect API key is not a substitute)
+#   - For App Store Connect uploads: app must be registered in App Store Connect
 #   - For notarized DMG: requires Developer ID certificate
 #
 set -e
@@ -47,30 +60,6 @@ while [ $# -gt 0 ]; do
 done
 set -- ${MODE_ARGS+"${MODE_ARGS[@]}"}
 
-# Refuse to archive against stale committed generated code (#2911). The
-# workflow factories and database types under Sources/ are generated and
-# COMMITTED, and no build regenerates them — so without this gate the one build
-# that produces a shippable artifact is the one build that can ship types
-# emitted from a schema that no longer exists.
-#
-# This is the `--check` half, not the regenerating half, deliberately: an
-# archive that quietly rewrote committed sources mid-release would upload an
-# artifact built from code no commit contains, and hide the drift instead of
-# reporting it. Regenerating is the developer's step, on the developer's
-# machine, followed by a commit.
-#
-# It reads local TOML only — no network, no login — and exits 0 for an app that
-# has synced neither workflows nor database types. The models are not covered
-# here and do not need to be: they are gitignored, and the regeneration below
-# emits them before xcodegen scans for sources (#3009), so even a first-ever
-# archive on a fresh clone builds a project that lists them.
-if ! bash scripts/codegen.sh --check; then
-    echo "" >&2
-    echo "Refusing to archive: the committed generated sources are out of date." >&2
-    echo "  Run \`bash scripts/codegen.sh\` and commit the result, then archive again." >&2
-    exit 1
-fi
-
 # Regenerate the Xcode project from project.yml, then re-copy the app's package
 # pin into it. Without the pin sync an archive can ship the revision Xcode last
 # resolved rather than the one the app is pinned to. See
@@ -94,6 +83,37 @@ check_team_id() {
     fi
 }
 
+# Why an archive or export here dies with `No Accounts` / `No profiles for
+# '<bundle id>' were found`, and what to run instead. Both xcodebuild steps
+# authenticate through Xcode's account session — there is no key to hand them
+# — so the failure is the machine state, not the project (#3416).
+ios_signing_failed() {
+    echo "" >&2
+    echo "The iOS archive failed. archive.sh signs through the Apple ID in" >&2
+    echo "Xcode -> Settings -> Accounts and never reads fastlane/.env, so with only an" >&2
+    echo "App Store Connect API key configured it fails like this:" >&2
+    echo "  error: No Accounts: Add a new account in Accounts settings." >&2
+    echo "" >&2
+    echo "For TestFlight from the API key alone, run the beta lane instead:" >&2
+    echo "  bundle exec fastlane ios beta" >&2
+    echo "It authenticates the archive with the key and fetches the distribution" >&2
+    echo "certificate and App Store profile through it. See docs/README.md, Distribution." >&2
+    exit 1
+}
+
+# The macOS lanes still sign through Xcode's account too (`fastlane mac beta`
+# is not the API-key path), so the only fix for a macOS `No Accounts` is the
+# Accounts pane.
+mac_signing_failed() {
+    echo "" >&2
+    echo "The macOS archive failed. archive.sh signs through the Apple ID in" >&2
+    echo "Xcode -> Settings -> Accounts, so" >&2
+    echo "  error: No Accounts: Add a new account in Accounts settings." >&2
+    echo "means none is added: add your team's Apple ID there and re-run." >&2
+    echo "(fastlane's macOS lanes sign the same way, so they are not a way around it.)" >&2
+    exit 1
+}
+
 archive_ios() {
     local scheme="PrimitiveAppTemplate_iOS"
     check_team_id "$scheme"
@@ -104,9 +124,9 @@ archive_ios() {
         -scheme "$scheme" \
         -destination "generic/platform=iOS" \
         -archivePath "$BUILD_DIR/PrimitiveAppTemplate-iOS.xcarchive" \
-        -quiet
+        -quiet || ios_signing_failed
 
-    echo "Exporting for App Store / TestFlight..."
+    echo "Exporting to App Store Connect..."
     cat > "$BUILD_DIR/ExportOptions-ios.plist" << 'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -126,14 +146,16 @@ PLIST
         -archivePath "$BUILD_DIR/PrimitiveAppTemplate-iOS.xcarchive" \
         -exportOptionsPlist "$BUILD_DIR/ExportOptions-ios.plist" \
         -exportPath "$BUILD_DIR/ios-export" \
-        -quiet
+        -quiet || ios_signing_failed
 
+    # ExportOptions says `destination: upload`: the export step above handed
+    # the build to App Store Connect itself, so there is no upload left to do.
     echo ""
-    echo "Done! Exported to: $BUILD_DIR/ios-export/"
+    echo "Done! Uploaded to App Store Connect; export summary in $BUILD_DIR/ios-export/"
+    echo "It appears in TestFlight after processing (5-30 min)."
     echo ""
-    echo "To upload to TestFlight:"
-    echo "  Option 1: Open Xcode -> Window -> Organizer -> select archive -> Distribute App"
-    echo "  Option 2: xcrun altool --upload-app -f $BUILD_DIR/ios-export/*.ipa -t ios -u YOUR_APPLE_ID"
+    echo "The same upload without an Apple ID in Xcode (API key only):"
+    echo "  bundle exec fastlane ios beta"
 }
 
 archive_mac() {
@@ -146,9 +168,9 @@ archive_mac() {
         -scheme "$scheme" \
         -destination "generic/platform=macOS" \
         -archivePath "$BUILD_DIR/PrimitiveAppTemplate-macOS.xcarchive" \
-        -quiet
+        -quiet || mac_signing_failed
 
-    echo "Exporting for Mac App Store / TestFlight..."
+    echo "Exporting to App Store Connect..."
     cat > "$BUILD_DIR/ExportOptions-mac.plist" << 'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -168,14 +190,12 @@ PLIST
         -archivePath "$BUILD_DIR/PrimitiveAppTemplate-macOS.xcarchive" \
         -exportOptionsPlist "$BUILD_DIR/ExportOptions-mac.plist" \
         -exportPath "$BUILD_DIR/mac-export" \
-        -quiet
+        -quiet || mac_signing_failed
 
+    # `destination: upload`, as for iOS: the export uploaded the build itself.
     echo ""
-    echo "Done! Exported to: $BUILD_DIR/mac-export/"
-    echo ""
-    echo "To upload to TestFlight:"
-    echo "  Option 1: Open Xcode -> Window -> Organizer -> select archive -> Distribute App"
-    echo "  Option 2: xcrun altool --upload-app -f \"$BUILD_DIR/mac-export/*.pkg\" -t macos -u YOUR_APPLE_ID"
+    echo "Done! Uploaded to App Store Connect; export summary in $BUILD_DIR/mac-export/"
+    echo "It appears in TestFlight after processing (5-30 min)."
 }
 
 build_dmg() {
@@ -248,11 +268,16 @@ case "${1:-}" in
     *)
         echo "Usage: ./archive.sh [ios|mac|dmg] [--primitive-env <name>]"
         echo ""
-        echo "  ios  -- Archive for iOS TestFlight / App Store"
-        echo "  mac  -- Archive for macOS TestFlight / Mac App Store"
+        echo "  ios  -- Archive an iOS build with Xcode automatic signing and upload it to App Store Connect"
+        echo "  mac  -- Archive a macOS build with Xcode automatic signing and upload it to App Store Connect"
         echo "  dmg  -- Build a notarizable DMG for direct macOS distribution"
         echo ""
-        echo "Requires an Apple Developer account (\$99/year) and DEVELOPMENT_TEAM set in project.yml."
+        echo "Every mode signs through the Apple ID in Xcode -> Settings -> Accounts, and needs"
+        echo "an Apple Developer account (\$99/year) and DEVELOPMENT_TEAM set in project.yml."
+        echo ""
+        echo "For TestFlight from an App Store Connect API key alone (no Apple ID in Xcode):"
+        echo "  bundle exec fastlane ios beta"
+        echo "See docs/README.md, Distribution."
         exit 1
         ;;
 esac

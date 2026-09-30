@@ -49,7 +49,7 @@ struct ContentView: View {
         // transport; the demo app's Deep Links page walks through both.
         //
         // The sign-in EMAIL is code-only until the app has a link target. Give
-        // the environment a `webUrl` in .primitive/config.json and the email
+        // the environment a `webUrl` in primitive/config.json and the email
         // carries that origin's https callback — a universal link on a device
         // with this app installed, a web sign-in anywhere else (#2982). With
         // no web counterpart the opt-in is the custom scheme: set

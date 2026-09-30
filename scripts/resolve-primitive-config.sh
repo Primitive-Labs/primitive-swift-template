@@ -2,7 +2,7 @@
 # Generate primitive.json from the selected Primitive environment (#2873).
 #
 # `primitive.json` is a BUILD PRODUCT, not a tracked file. The backend URL and
-# app ID are typed once, in `.primitive/config.json`, and this script writes
+# app ID are typed once, in `primitive/config.json`, and this script writes
 # the selected environment's values into the flat shape
 # `PrimitiveCredentials.swift` already parses:
 #
@@ -35,10 +35,23 @@
 # declares the project config, this machine's selection beside it, and
 # $(SRCROOT)/primitive.json, so inside that context this script reads ONLY
 # those and deliberately ignores PRIMITIVE_PROJECT_CONFIG (whose target is by
-# definition undeclared). The shipped template never sets
-# ENABLE_USER_SCRIPT_SANDBOXING.
+# definition undeclared).
 #
-# The declared config is $(SRCROOT)/.primitive/config.json in a standalone app,
+# The pre-#3153 anchor, $(SRCROOT)/.primitive/config.json, is declared as an
+# input too — not to read it (nothing is ever read from the old tree) but so
+# the walk may STAT it and refuse the build naming both anchors, exactly as
+# the shell path does. The
+# shipped template never sets ENABLE_USER_SCRIPT_SANDBOXING, but it is Xcode's
+# default for new targets and a developer may switch it on. The profile Xcode
+# writes for the phase denies `file-read*` on the whole $SRCROOT subtree and
+# re-allows each declared input by literal path; whether a bare stat of an
+# UNDECLARED path still answers is a property of that profile (on Xcode 26.4
+# it did; reading the file's bytes did not), not a contract. Declaring the
+# anchor is the contract (#3343): the refusal no longer depends on the
+# profile's shape, and the message below covers an anchor this phase did not
+# declare.
+#
+# The declared config is $(SRCROOT)/primitive/config.json in a standalone app,
 # and an ancestor's when this client is one of several in one Primitive app —
 # so the Xcode path walks up the same way the shell path does. Undeclared
 # ancestors simply are not readable inside the sandbox, so the walk finds the
@@ -91,17 +104,39 @@ fi
 
 OUTPUT="$APP_ROOT/primitive.json"
 
-# ── locate .primitive/config.json ────────────────────────────────────────────
+# ── an unmigrated project is refused, never read ─────────────────────────────
+# A `.primitive/config.json` with no `primitive/config.json` beside it: the one
+# message the CLI core and the Vite plugin give, so a project that never
+# migrated fails identically wherever it is built from. One sentence naming the
+# file found and the file expected; no document (the migration page was never
+# published, #3392). Anything else left under `.primitive/` beside a migrated
+# tree is machine-local junk and is ignored.
+#   $1 the old anchor that was found; $2 the new anchor that is expected
+unmigrated_project() {
+    fail "stale-layout" \
+        "Found $1 but no $2: this project still uses the retired layout under .primitive/, which is never read."
+}
+
+# ── locate primitive/config.json ─────────────────────────────────────────────
 CONFIG_PATH=""
 if [ "$IN_XCODE" = "1" ]; then
     # Declared inputs only. PRIMITIVE_PROJECT_CONFIG is deliberately not read.
     # The walk covers the app that owns several clients, whose config sits
     # above this one; the phase declares whichever file it lands on.
+    # The old anchor beside $SRCROOT is a declared input (#3343), so with the
+    # user-script sandbox on it may be stat'd and the refusal is the same as
+    # the shell path's. An old anchor the phase did NOT declare — an
+    # ancestor's, or a project whose .xcodeproj predates the declaration — is
+    # only as visible as the sandbox profile happens to make it, and when it
+    # is not, this falls through to missing-config below.
     dir="$APP_ROOT"
     while :; do
-        if [ -f "$dir/.primitive/config.json" ]; then
-            CONFIG_PATH="$dir/.primitive/config.json"
+        if [ -f "$dir/primitive/config.json" ]; then
+            CONFIG_PATH="$dir/primitive/config.json"
             break
+        fi
+        if [ -f "$dir/.primitive/config.json" ]; then
+            unmigrated_project "$dir/.primitive/config.json" "$dir/primitive/config.json"
         fi
         parent="$(dirname "$dir")"
         [ "$parent" = "$dir" ] && break
@@ -113,16 +148,31 @@ if [ "$IN_XCODE" = "1" ]; then
             # tree already had primitive.json generated (unsandboxed) by
             # regenerate-project.sh from a fixture. Reaching for that fixture
             # here would be an undeclared read.
-            echo "[primitive-config] No readable .primitive/config.json; keeping the" >&2
+            echo "[primitive-config] No readable primitive/config.json; keeping the" >&2
             echo "[primitive-config] pre-generated primitive.json. Skipping resolution." >&2
             exit 0
         fi
+        # Inside the sandbox "never initialized" and "still on the pre-#3153
+        # layout at a path this phase did not declare" can look the same, so
+        # the text names the second reason and the old anchor rather than
+        # sending the developer after a file that is present, merely in the
+        # old place.
         fail "missing-config" \
-            "No .primitive/config.json under \$SRCROOT or a declared parent, and no pre-generated primitive.json." \
-            "Run 'primitive init' in this project, or generate the file first:" \
+            "No primitive/config.json under \$SRCROOT or a declared parent, and no pre-generated primitive.json." \
+            "Either this project was never initialized — run 'primitive init' in it — or it is still on" \
+            "the pre-#3153 layout (.primitive/config.json), which this phase may not see from inside" \
+            "Xcode's user-script sandbox unless that path is a declared input. The configuration tree" \
+            "lives at primitive/config.json; nothing is read from the old one." \
+            "To generate the file outside Xcode first:" \
             "  bash scripts/resolve-primitive-config.sh"
     fi
 elif [ -n "${PRIMITIVE_PROJECT_CONFIG:-}" ]; then
+    # Checked before the file is read: the override bypasses the walk, so
+    # without this it would be the one way past the cutover. An override
+    # inside a `.primitive/` directory IS the old layout, named explicitly.
+    if [ "$(basename "$(dirname "$PRIMITIVE_PROJECT_CONFIG")")" = ".primitive" ]; then
+        unmigrated_project "$PRIMITIVE_PROJECT_CONFIG" "$(dirname "$(dirname "$PRIMITIVE_PROJECT_CONFIG")")/primitive/config.json"
+    fi
     if [ -f "$PRIMITIVE_PROJECT_CONFIG" ]; then
         CONFIG_PATH="$PRIMITIVE_PROJECT_CONFIG"
     else
@@ -132,26 +182,40 @@ elif [ -n "${PRIMITIVE_PROJECT_CONFIG:-}" ]; then
 else
     dir="$APP_ROOT"
     while :; do
-        if [ -f "$dir/.primitive/config.json" ]; then
-            CONFIG_PATH="$dir/.primitive/config.json"
+        if [ -f "$dir/primitive/config.json" ]; then
+            CONFIG_PATH="$dir/primitive/config.json"
             break
+        fi
+        if [ -f "$dir/.primitive/config.json" ]; then
+            unmigrated_project "$dir/.primitive/config.json" "$dir/primitive/config.json"
         fi
         parent="$(dirname "$dir")"
         [ "$parent" = "$dir" ] && break
         dir="$parent"
     done
     if [ -z "$CONFIG_PATH" ]; then
+        # The remedy names `primitive init` and nothing else (#3154): `env add`
+        # now requires a project config to already exist.
         fail "missing-config" \
-            "No .primitive/config.json in $APP_ROOT or any parent directory." \
+            "No primitive/config.json in $APP_ROOT or any parent directory." \
             "It is the single source of truth for the backend URL and app ID." \
-            "Run 'primitive init' to create one, or 'primitive env add <name> --api-url ... --app-id ...'."
+            "Run 'primitive init' to create one."
     fi
 fi
 
-LOCAL_PATH="$(dirname "$CONFIG_PATH")/local.json"
+# Machine-local state lives under the PROJECT ROOT's `.primitive/`, not beside
+# the committed config (#3153). The root is the parent of `primitive/`, or the
+# containing directory for a bare PRIMITIVE_PROJECT_CONFIG fixture.
+CONFIG_DIR="$(dirname "$CONFIG_PATH")"
+if [ "$(basename "$CONFIG_DIR")" = "primitive" ]; then
+    PROJECT_ROOT_DIR="$(dirname "$CONFIG_DIR")"
+else
+    PROJECT_ROOT_DIR="$CONFIG_DIR"
+fi
+LOCAL_PATH="$PROJECT_ROOT_DIR/.primitive/local.json"
 
 if ! command -v python3 >/dev/null 2>&1; then
-    fail "missing-config" "python3 is required to read .primitive/config.json."
+    fail "missing-config" "python3 is required to read primitive/config.json."
 fi
 
 # ── resolve and write ────────────────────────────────────────────────────────
@@ -188,6 +252,25 @@ def fail(kind, *lines):
     sys.exit(1)
 
 
+# ECMAScript's WhiteSpace + LineTerminator, which is what `String.prototype.trim`
+# strips in the CLI core this file is a port of. Python's `str.strip()` is NOT
+# the same set -- it leaves U+FEFF alone and strips U+001C-U+001F and U+0085,
+# which JavaScript does not -- so a config with a visually blank appId of
+# U+FEFF would be rejected by the CLI and the Vite build while this script read
+# it as a real app id and stamped it into primitive.json. One algorithm, one
+# whitespace set.
+JS_WHITESPACE = (
+    "\t\n\v\f\r \u00a0\u1680\ufeff"
+    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a"
+    "\u2028\u2029\u202f\u205f\u3000"
+)
+
+
+def js_trim(value):
+    """`String.prototype.trim` for a str, character-for-character."""
+    return value.strip(JS_WHITESPACE)
+
+
 def normalized_web_origin(value):
     """The app's web counterpart as a normalized ORIGIN, or None (#2982).
 
@@ -204,7 +287,7 @@ def normalized_web_origin(value):
     """
     if not isinstance(value, str):
         return None
-    trimmed = value.strip()
+    trimmed = js_trim(value)
     if not trimmed:
         return None
     parts = urlsplit(trimmed)
@@ -260,6 +343,34 @@ environments = config.get("environments")
 if not isinstance(environments, dict):
     fail("malformed-config", '%s is missing required "environments" object.' % config_path)
 
+# Every environment names exactly one app, and the check is per ENVIRONMENT at
+# parse rather than after the selection -- parity with the CLI resolver core,
+# which enforces it on the whole file. Non-string and blank-after-trim are the
+# same failure as absent: an app id the Swift app could not use, which must
+# never be read as a silent None.
+def missing_app_id_message(name):
+    return (
+        'Environment "%s" in %s has no "appId". '
+        "Every environment names exactly one app -- add \"appId\": \"<app-id>\" to that "
+        "environment in primitive/config.json." % (name, config_path)
+    )
+
+
+APP_ID_DISCOVERY = (
+    "Find the app id in the Primitive admin UI, with 'primitive apps list' run from a "
+    'directory outside this project, or as the residual "currentAppId" in '
+    ".primitive/credentials.json if this environment was ever pointed at an app by the "
+    "retired per-machine app selection."
+)
+
+
+def read_app_id(value):
+    if not isinstance(value, str):
+        return None
+    trimmed = js_trim(value)
+    return trimmed or None
+
+
 for name, entry in environments.items():
     if not isinstance(entry, dict):
         fail("malformed-config", 'Environment "%s" must be an object in %s.' % (name, config_path))
@@ -269,6 +380,8 @@ for name, entry in environments.items():
             "malformed-config",
             'Environment "%s" must have a non-empty "apiUrl" string in %s.' % (name, config_path),
         )
+    if read_app_id(entry.get("appId")) is None:
+        fail("missing-app-id", missing_app_id_message(name), APP_ID_DISCOVERY)
 
 # This machine's selection, if any.
 local_selection = None
@@ -348,9 +461,7 @@ api_url = entry["apiUrl"].rstrip("/")
 # non-string "appId"/"appName" as absent rather than writing it into the app's
 # runtime config. Without this a numeric or object appId would reach
 # PrimitiveCredentials as a JSON value it cannot use.
-app_id = entry.get("appId")
-if not isinstance(app_id, str):
-    app_id = None
+app_id = read_app_id(entry.get("appId"))
 app_name = entry.get("appName")
 if not isinstance(app_name, str):
     app_name = None
@@ -362,14 +473,6 @@ if not isinstance(app_name, str):
 # web counterpart this app could not actually use.
 web_url_raw = entry.get("webUrl")
 web_url = normalized_web_origin(web_url_raw)
-
-if not app_id:
-    fail(
-        "missing-app-id",
-        'Environment "%s" in %s has no "appId", and the app cannot start without one.'
-        % (chosen, config_path),
-        "Add it with: primitive env add %s --api-url %s --app-id <id>" % (chosen, api_url),
-    )
 
 document = {
     "_generated": "by scripts/resolve-primitive-config.sh — do not edit",
@@ -396,7 +499,7 @@ report = [
     "[primitive-config]   appName: %s" % (app_name or "(unset)"),
     "[primitive-config]   webUrl:  %s" % (web_url or "(unset)"),
 ]
-if web_url is None and isinstance(web_url_raw, str) and web_url_raw.strip():
+if web_url is None and isinstance(web_url_raw, str) and js_trim(web_url_raw):
     # Said out loud: a dropped value looks exactly like an unset one in the
     # app, and "my sign-in email has no link" is a hard symptom to trace back
     # to a typo'd origin.

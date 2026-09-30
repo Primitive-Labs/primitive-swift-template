@@ -1,0 +1,2 @@
+$(SRCROOT)/.primitive-cli-version
+$(SRCROOT)/Sources/PrimitiveAppTemplate/Models/models.toml
