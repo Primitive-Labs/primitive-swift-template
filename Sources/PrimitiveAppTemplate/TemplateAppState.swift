@@ -84,6 +84,9 @@ final class TemplateAppState: PrimitiveAppState {
     /// having to thread their own Combine sink on `$isConnected`.
     public override func connectClient() async {
         await super.connectClient()
+        // Still not connected: the base class has shown the error, and calls
+        // this method again once the connection gets through.
+        guard client?.isConnected == true else { return }
         // Register every codegen'd model up front so the client's shared
         // cross-document store mirrors each document the moment it opens — the
         // codegen facade (`ItemRecord.query()`, `record.save(in: documentId)`)
@@ -158,5 +161,15 @@ final class TemplateAppState: PrimitiveAppState {
     ) async {
         // Load your models from the facade here once you've defined
         // models in models.toml. See the example in the docstring above.
+    }
+
+    /// Called by the base class when the user signs out, after it has
+    /// cleared the profile and document list. Clear everything you loaded
+    /// for that account here, so the next account to sign in starts empty:
+    ///
+    ///   items = []
+    public override func onSignedOut() {
+        transientErrorDismissTask?.cancel()
+        transientError = nil
     }
 }

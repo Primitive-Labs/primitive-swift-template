@@ -633,10 +633,7 @@ invited_ack = os.environ['SMOKE_INVITED_ACK']
 bases = s.get('testAccountBaseEmails') or []
 if base not in bases:
     print('base address ' + base + ' is not in testAccountBaseEmails ' + json.dumps(bases)); sys.exit(0)
-email_sign_in = s.get('emailSignInEnabled')
-if email_sign_in is None:
-    # A server that predates #2884 reports the pair this setting replaced.
-    email_sign_in = s.get('otpEnabled') is not False or s.get('magicLinkEnabled') is not False
+email_sign_in = s.get('emailSignInEnabled') is not False
 if not email_sign_in:
     print('emailSignInEnabled is false — enable email sign-in so the email button sends the code'); sys.exit(0)
 mode = s.get('mode') or '(unset)'

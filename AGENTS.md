@@ -77,6 +77,8 @@ primitive guides get devtools --language swift
 
 When adding models, queries, writes, or auth flows, fetch the matching guide first — e.g. `primitive guides get documents --language swift`. The guides are written against this same library.
 
+If the app's `app.toml` sets `rootDocumentFormat = 2` under `[app]`, each user's root document is a large document. The Swift client opens it like any other root with its default on-disk store, so the app needs no change. Tests that sign in through `PrimitiveTestConfig` default to an in-memory store, which cannot open a large document: pass `storageConfig: .sqlite()` there. The web clients of the same app must use the `opfs` engine.
+
 ## Email sign-in links
 
 Email sign-in works out of the box and needs no app settings: `PrimitiveAuthManager` sends no redirect target, so the server emails a 6-digit code alone. That code is the credential that always works — including in the Simulator, where a custom-scheme link cannot open anything.

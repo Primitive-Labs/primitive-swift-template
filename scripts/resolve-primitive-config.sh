@@ -22,6 +22,12 @@
 #   4. "defaultEnvironment"       (the committed team default)
 #   5. the sole environment, if there is exactly one
 #
+# Steps 1–3 may also name a machine-local environment (#4117): an entry in the
+# "environments" map of .primitive/local.json — a child app, naming its own
+# appId and apiUrl and, as "tree", the committed environment whose tree it
+# shares. Its primitive.json carries the child's identity and no webUrl.
+# Steps 4 and 5 consider committed environments only.
+#
 # ── why bash and not the CLI ─────────────────────────────────────────────────
 # This runs on Xcode's pre-build path, including Archive and CI. Depending on
 # a node binary being installed and on PATH there is a fragility we don't want
@@ -233,6 +239,7 @@ PRIMITIVE_ENV_VAR="${PRIMITIVE_ENV:-}" \
 python3 - <<'PYTHON'
 import json
 import os
+import re
 import sys
 from urllib.parse import urlsplit
 
@@ -383,8 +390,9 @@ for name, entry in environments.items():
     if read_app_id(entry.get("appId")) is None:
         fail("missing-app-id", missing_app_id_message(name), APP_ID_DISCOVERY)
 
-# This machine's selection, if any.
+# This machine's selection and machine-local environments, if any.
 local_selection = None
+local = {}
 if os.path.exists(local_path):
     try:
         with open(local_path, "r") as handle:
@@ -410,12 +418,87 @@ if os.path.exists(local_path):
         )
     local_selection = selected or None
 
+LOCAL_REMEDY = "Fix or remove the \"%s\" entry under \"environments\" in .primitive/local.json."
+ENVIRONMENT_NAME = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_-]*")
+
+
+def bad_local_entry(name, detail):
+    fail(
+        "corrupt-local-state",
+        '%s: machine-local environment "%s" %s.' % (local_path, name, detail),
+        LOCAL_REMEDY % name,
+    )
+
+
+# Machine-local environments (#4117), validated at the read whether or not one
+# is selected -- the port of `parseLocalEnvironments` in the CLI core, so a file
+# one reader refuses is refused by every reader, with the same error kind.
+local_environments = {}
+# Only an absent key reads as empty: an explicit null is refused, as the core
+# refuses it.
+if "environments" in local:
+    raw_local_environments = local["environments"]
+    if not isinstance(raw_local_environments, dict):
+        fail(
+            "corrupt-local-state",
+            '%s is unreadable: "environments" must be an object keyed by environment name.'
+            % local_path,
+            'Fix or remove "environments" in .primitive/local.json.',
+        )
+    committed_names = list(environments.keys())
+    for name, entry in raw_local_environments.items():
+        if not ENVIRONMENT_NAME.fullmatch(name):
+            bad_local_entry(
+                name,
+                "is not a valid environment name (letters, digits, dashes and underscores, "
+                "starting with a letter or digit)",
+            )
+        if not isinstance(entry, dict):
+            bad_local_entry(name, "must be an object")
+        local_api_url = entry.get("apiUrl")
+        if not isinstance(local_api_url, str) or not js_trim(local_api_url):
+            bad_local_entry(name, 'has no "apiUrl" string')
+        local_app_id = read_app_id(entry.get("appId"))
+        if local_app_id is None:
+            bad_local_entry(name, 'has no "appId" naming the app it selects')
+        tree = entry.get("tree")
+        if not isinstance(tree, str) or not js_trim(tree):
+            bad_local_entry(
+                name,
+                'has no "tree" naming the committed environment whose configuration tree it uses',
+            )
+        tree = js_trim(tree)
+        if name in environments:
+            bad_local_entry(
+                name,
+                "has the name of a committed environment in primitive/config.json; "
+                "a machine-local environment needs a name of its own",
+            )
+        if tree not in environments:
+            bad_local_entry(
+                name,
+                'has "tree": "%s", which is not an environment in primitive/config.json '
+                "(available: %s)" % (tree, ", ".join(committed_names) or "(none)"),
+            )
+        local_api_url = js_trim(local_api_url)
+        if local_api_url.endswith("/"):
+            local_api_url = local_api_url[:-1]
+        local_app_name = entry.get("appName")
+        local_environments[name] = {
+            "apiUrl": local_api_url,
+            "appId": local_app_id,
+            "appName": local_app_name if isinstance(local_app_name, str) else None,
+            "tree": tree,
+        }
+
 available = sorted(environments.keys())
-listing = ", ".join(available) if available else "(none)"
+listing = ", ".join(
+    available + ["%s (local)" % name for name in local_environments]
+) or "(none)"
 
 
-def require_known(name, origin):
-    if name not in environments:
+def require_known(name, origin, committed_only=False):
+    if name not in environments and (committed_only or name not in local_environments):
         fail(
             "unknown-environment",
             'Environment "%s" is not defined in %s (selected %s). Available: %s'
@@ -436,7 +519,7 @@ elif local_selection:
     chosen = require_known(local_selection, "in .primitive/local.json")
     source = "local"
 elif default_environment:
-    chosen = require_known(default_environment, 'as "defaultEnvironment"')
+    chosen = require_known(default_environment, 'as "defaultEnvironment"', committed_only=True)
     source = "default"
 elif len(available) == 1:
     chosen = available[0]
@@ -455,24 +538,36 @@ else:
         % (config_path, listing),
     )
 
-entry = environments[chosen]
-api_url = entry["apiUrl"].rstrip("/")
-# Typed, not merely present — matching the CLI resolver core, which reads a
-# non-string "appId"/"appName" as absent rather than writing it into the app's
-# runtime config. Without this a numeric or object appId would reach
-# PrimitiveCredentials as a JSON value it cannot use.
-app_id = read_app_id(entry.get("appId"))
-app_name = entry.get("appName")
-if not isinstance(app_name, str):
-    app_name = None
-# The app's web counterpart for THIS environment (#2982): the origin whose
-# /oauth/callback the emailed sign-in link points at, and the origin an
-# incoming universal link is trusted from. Only the selected environment's
-# value is written, so a dev build never carries the production callback, and
-# only an origin is written (see normalized_web_origin) -- anything else is a
-# web counterpart this app could not actually use.
-web_url_raw = entry.get("webUrl")
-web_url = normalized_web_origin(web_url_raw)
+if chosen in environments:
+    entry = environments[chosen]
+    tree = chosen
+    api_url = entry["apiUrl"].rstrip("/")
+    # Typed, not merely present — matching the CLI resolver core, which reads a
+    # non-string "appId"/"appName" as absent rather than writing it into the
+    # app's runtime config. Without this a numeric or object appId would reach
+    # PrimitiveCredentials as a JSON value it cannot use.
+    app_id = read_app_id(entry.get("appId"))
+    app_name = entry.get("appName")
+    if not isinstance(app_name, str):
+        app_name = None
+    # The app's web counterpart for THIS environment (#2982): the origin whose
+    # /oauth/callback the emailed sign-in link points at, and the origin an
+    # incoming universal link is trusted from. Only the selected environment's
+    # value is written, so a dev build never carries the production callback,
+    # and only an origin is written (see normalized_web_origin) -- anything
+    # else is a web counterpart this app could not actually use.
+    web_url_raw = entry.get("webUrl")
+    web_url = normalized_web_origin(web_url_raw)
+else:
+    # A machine-local environment: the child's own app and server. It has no
+    # web counterpart of its own, so nothing web-related is read from it.
+    local_entry = local_environments[chosen]
+    tree = local_entry["tree"]
+    api_url = local_entry["apiUrl"]
+    app_id = local_entry["appId"]
+    app_name = local_entry["appName"]
+    web_url_raw = None
+    web_url = None
 
 document = {
     "_generated": "by scripts/resolve-primitive-config.sh — do not edit",
@@ -494,6 +589,8 @@ with open(output_path, "w") as handle:
 # empty for callers that capture it.
 report = [
     "[primitive-config] Primitive environment: %s (selected: %s)" % (chosen, source),
+    "[primitive-config]   tree:    %s%s"
+    % (tree, " (machine-local, .primitive/local.json)" if chosen in local_environments else ""),
     "[primitive-config]   apiUrl:  %s" % api_url,
     "[primitive-config]   appId:   %s" % app_id,
     "[primitive-config]   appName: %s" % (app_name or "(unset)"),
