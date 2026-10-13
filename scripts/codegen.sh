@@ -1,9 +1,8 @@
 #!/bin/bash
 # Regenerate every piece of generated Swift this app has: the model types, the
-# workflow factories, the database types and the server-function invokers. ONE
-# entry point, the way the Vue template funnels `js-bao-codegen-v2` +
-# `primitive databases codegen` + `primitive workflows codegen` through a
-# single `pnpm codegen` that `dev`, `build` and `test` all depend on.
+# workflow factories and the server-function invokers. ONE entry point, the way
+# the Vue template funnels `js-bao-codegen-v2` + `primitive workflows codegen`
+# through a single `pnpm codegen` that `dev`, `build` and `test` all depend on.
 #
 # Why an entry point rather than a call per generator per build script: the
 # codegens fire on different paths and that is exactly how the workflow half
@@ -14,8 +13,7 @@
 # and because the factories are COMMITTED every build kept compiling whatever
 # was in the tree — stale factories against a changed schema or an upgraded CLI
 # produced no error at all. With one script, a build path that regenerates
-# models cannot skip the rest. The database types (#2911) are the same shape:
-# committed output, no build that rewrites them.
+# models cannot skip the rest.
 #
 # GENERATED CODE IS CODE (#3078). All three classes are committed, reviewed and
 # tested like any other source, and this script runs on every build path — the
@@ -27,7 +25,7 @@
 #
 # Usage:
 #   bash scripts/codegen.sh                    regenerate models + workflow
-#                                              factories + database types
+#                                              factories + function invokers
 #   bash scripts/codegen.sh --verify-project   …and then fail if the committed
 #                                              .xcodeproj does not compile
 #                                              exactly what was emitted
@@ -57,7 +55,6 @@ done
 
 APP_SOURCES="Sources/PrimitiveAppTemplate"
 WORKFLOW_GEN_DIR="$APP_SOURCES/Workflows/Generated"
-DATABASE_GEN_DIR="$APP_SOURCES/Databases/Generated"
 FUNCTIONS_GEN_DIR="$APP_SOURCES/Functions/Generated"
 MODELS_GEN_DIR="$APP_SOURCES/Models/Generated"
 
@@ -77,7 +74,7 @@ OUTPUTS_LIST="scripts/codegen-outputs.xcfilelist"
 # point including the Run button (#3078). Xcode's GUI build phases run with a
 # minimal PATH that carries neither the `primitive` CLI nor node, so
 # `command -v primitive` alone would fail every GUI build of an app with synced
-# workflows or database types — telling the developer to install something they
+# workflows or functions — telling the developer to install something they
 # already have. So probe, the way `scripts/generate-models.sh` already reaches
 # past the environment Xcode hands it.
 #
@@ -327,33 +324,13 @@ if has_synced workflows; then
 fi
 
 # ────────────────────────────────────────────────────────────────────────────
-# Database types
-# ────────────────────────────────────────────────────────────────────────────
-# Record structs, per-operation params/result types and the typed ops factory
-# for each synced database type — committed, like the workflow factories and
-# the models, and rewritten here on every build path.
-#
-# Guarded exactly like the workflow half: with no synced
-# `primitive/<env>/database-type-configs/*.toml`, `primitive
-# databases codegen` exits non-zero with "No database-type-configs/*.toml files
-# found", which must not fail a build that has nothing to generate.
-if has_synced database-type-configs; then
-    resolve_cli "database types"
-
-    echo "Running primitive databases codegen..." >&2
-    mkdir -p "$DATABASE_GEN_DIR"
-    run_cli databases codegen --lang swift -o "$DATABASE_GEN_DIR"
-fi
-
-# ────────────────────────────────────────────────────────────────────────────
 # Server-function invokers
 # ────────────────────────────────────────────────────────────────────────────
 # `<Key>Input` / `<Key>Output` from each function's declared schemas plus a
-# typed `<Key>Function` invoker whose verb set the function's MODE fixes
-# (#3344) — committed like the three classes above, and rewritten here on every
-# build path for the same reason.
+# typed `<Key>Function` invoker (#3344) — committed like the two classes above,
+# and rewritten here on every build path for the same reason.
 #
-# Guarded exactly like the other two halves: with no synced
+# Guarded exactly like the workflow half: with no synced
 # `primitive/<env>/functions/*.toml` there is nothing to generate, and a build
 # that has nothing to generate must not fail.
 if has_synced functions; then
@@ -412,7 +389,7 @@ codegen_inputs() {
     [ -f "$SCHEMA_APP_SOURCES/bao-codegen.json" ] &&
         srcroot_relative "$SCHEMA_APP_SOURCES/bao-codegen.json"
     [ -n "$SCHEMA_TOML" ] && srcroot_relative "$SCHEMA_TOML"
-    for kind in workflows database-type-configs functions; do
+    for kind in workflows functions; do
         while IFS= read -r toml; do
             [ -n "$toml" ] && srcroot_relative "$toml"
         done <<EOF
@@ -423,7 +400,7 @@ EOF
 }
 
 codegen_outputs() {
-    for dir in "$MODELS_GEN_DIR" "$WORKFLOW_GEN_DIR" "$DATABASE_GEN_DIR" "$FUNCTIONS_GEN_DIR"; do
+    for dir in "$MODELS_GEN_DIR" "$WORKFLOW_GEN_DIR" "$FUNCTIONS_GEN_DIR"; do
         for generated in "$dir"/*.swift; do
             [ -f "$generated" ] && echo "\$(SRCROOT)/$generated"
         done
@@ -444,7 +421,7 @@ codegen_outputs | sort -u > "$OUTPUTS_LIST"
 if [ "$VERIFY_PROJECT" = true ]; then
     bash scripts/verify-generated-project.sh \
         --label "$SCHEMA_TOML" \
-        "$MODELS_GEN_DIR" "$WORKFLOW_GEN_DIR" "$DATABASE_GEN_DIR" "$FUNCTIONS_GEN_DIR"
+        "$MODELS_GEN_DIR" "$WORKFLOW_GEN_DIR" "$FUNCTIONS_GEN_DIR"
 fi
 
 # The phase declares this stamp as its output. Written LAST, and by this script

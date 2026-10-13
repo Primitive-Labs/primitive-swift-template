@@ -9,7 +9,7 @@ build/
 Package.resolved
 
 # NOTE: nothing generated is ignored (#3078). Generated code is code — the
-# model types, the workflow factories and the database types are all committed,
+# model types, the workflow factories and the function invokers are all committed,
 # reviewed and tested like any other source, and every build path regenerates
 # them into the working tree, so a schema change shows up as a diff you commit
 # with the change. `primitive.json` below is the exception that proves the

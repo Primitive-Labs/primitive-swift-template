@@ -5,7 +5,7 @@
 #
 #   scripts/codegen.sh
 #       emits every generated class — the model types, the workflow factories
-#       and the database types — into the source tree. xcodegen can only list a
+#       and the function invokers — into the source tree. xcodegen can only list a
 #       file that is already on disk, so a newly declared model or a newly
 #       synced workflow has to be emitted first (#3009, widened by #3078).
 #

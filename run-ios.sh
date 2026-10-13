@@ -80,7 +80,7 @@ done
 # The app target also runs the model half as a pre-build phase (#2886), so a
 # build started from Xcode or a bare `xcodebuild` is just as fresh. What this
 # call is really for is the COMMITTED halves — the workflow factories and the
-# database types — which nothing else regenerates; the models are emitted again
+# function invokers — which nothing else regenerates; the models are emitted again
 # by the regeneration below, which needs them on disk to list a NEWLY added one
 # (#3009). That is also why this path leaves `--verify-project` off — the
 # regeneration it would ask for is the next line.

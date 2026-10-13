@@ -20,7 +20,7 @@
 #
 # This is not a special case (#3078): it regenerates and builds like every
 # other path. `scripts/regenerate-project.sh` runs the full codegen — models,
-# workflow factories, database types — before xcodegen scans for sources, and a
+# workflow factories, function invokers — before xcodegen scans for sources, and a
 # failing codegen stops the archive. There is no release-time drift check: a
 # schema change shows up as a working-tree diff on the developer's ordinary
 # build, which is where it gets reviewed and committed.

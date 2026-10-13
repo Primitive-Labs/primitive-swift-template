@@ -19,7 +19,7 @@ bash scripts/resolve-primitive-config.sh
 # Every build path regenerates every generated class (#3078). `swift build`
 # below runs the SwiftPM plugin for the MODELS, into the plugin's own work dir —
 # it cannot refresh the committed tree mirror, and it never touches the workflow
-# factories or the database types. So the entry point runs first, here, and this
+# factories or the function invokers. So the entry point runs first, here, and this
 # app build is a path where a schema change becomes a diff to commit rather than
 # something a later build discovers.
 bash scripts/codegen.sh
