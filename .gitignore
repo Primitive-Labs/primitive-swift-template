@@ -34,6 +34,10 @@ primitive.json
 # machine-local, `primitive/` is the committed configuration tree.
 .primitive/
 
+# A child app's own config var values, beside the tree's vars.toml
+# (primitive/<env>/vars.<child>.override.toml). Machine-local, never committed.
+primitive/*/*.override.toml
+
 # Fastlane / App Store Connect — never commit credentials
 fastlane/.env
 fastlane/api_key.p8
