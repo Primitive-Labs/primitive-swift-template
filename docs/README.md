@@ -109,6 +109,26 @@ bash scripts/resolve-primitive-config.sh
 
 Switch which backend this machine builds against with `primitive env use <name>`, or for a single run with `./run.sh --primitive-env <name>`. Every build prints the environment it resolved.
 
+## Child apps for parallel work
+
+When several agents or git worktrees work on this app at once, give each line of work its own child app — a copy of the selected environment's app that shares its `primitive/<env>/` tree — so a `config push` from one branch never reaches the others. With the parent environment selected:
+
+```sh
+scripts/child-app.sh up feature-x
+./run.sh                              # any build regenerates primitive.json for the child
+# ... work, push, test ...
+scripts/child-app.sh down feature-x
+```
+
+`up` creates the child (or attaches or resumes one that exists), checks that it is the environment it acts on, runs your `scripts/child-app-init`, pushes the tree into it and selects it. Rerun it to resume an interrupted run. `down` runs your `scripts/child-app-teardown`, then deletes the child and its local state.
+
+The template ships neither hook: what a fresh child needs is your app's call. Add them as executable files:
+
+- `scripts/child-app-init` — seed the child: test users, databases, its own config vars (`primitive config set vars KEY=value`). It runs before the first push and on every `up`, so make it safe to repeat.
+- `scripts/child-app-teardown` — revoke or delete anything the child created outside the platform (third-party connections, webhooks). Deleting the child doesn't reach those, so this is your app's responsibility; `down --skip-teardown` skips the hook and leaves them behind.
+
+Both run from the app root with `PRIMITIVE_ENV` (the child), `CHILD_APP_ID`, `CHILD_APP_SLUG` and `PARENT_ENV` set; address the child through `PRIMITIVE_ENV`, not the selected environment. A slug must not be the name of a committed environment. See `primitive guides get configuration` ("Child apps") for the rest of the workflow.
+
 ## SPM vs Xcode project
 
 The template ships **both** a `Package.swift` and a `PrimitiveAppTemplate.xcodeproj`. They build the same source files. Use whichever you prefer:
