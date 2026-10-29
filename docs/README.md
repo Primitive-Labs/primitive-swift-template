@@ -24,6 +24,7 @@ primitive-swift-template/
 ├── primitive.json                      ← GENERATED (gitignored) from .primitive/config.json
 ├── project.yml / *.xcodeproj           ← Xcode project (parallel to SPM, both build the same code)
 ├── run.sh / run-ios.sh / build.sh      ← Build helpers
+├── test.sh                             ← Runs the tests in Tests/ (see Running the tests below)
 ├── fastlane/                           ← TestFlight + App Store lanes (see Distribution below)
 ├── archive.sh                          ← Xcode-account archives (not the TestFlight path — see Distribution)
 ├── scripts/smoke-test.sh               ← Simulator smoke tests (launch + opt-in idb sign-in)
@@ -36,6 +37,9 @@ primitive-swift-template/
     └── Views/
         ├── ContentView.swift           ← Auth gate + tab view + Home placeholder
         └── TransientErrorToast.swift   ← Toast for per-mutation, recoverable errors
+└── Tests/PrimitiveAppTemplateTests/
+    ├── ExampleTests.swift              ← One test that signs in and reads the profile
+    └── Support/SignIn.swift            ← TestSignIn: a client signed in as the test account
 ```
 
 ## How the pieces fit
@@ -141,6 +145,51 @@ The template ships **both** a `Package.swift` and a `PrimitiveAppTemplate.xcodep
 | `open *.xcodeproj` | Xcode IDE | Full IDE, debugging, instruments |
 
 Because this is SPM-based, **adding a new `.swift` file is just creating it on disk** — both the SPM build and the Xcode project pick it up automatically. (This is different from an app that uses an Xcode project as the source of truth, which requires `project.pbxproj` edits when you add files.)
+
+## Running the tests
+
+`./test.sh` runs the tests in `Tests/` with `swift test` on your Mac. They sign in as a test account and call your app's backend for real, with no simulator, browser or code email:
+
+```bash
+export PRIMITIVE_TEST_EMAIL="you+primitivetest-ios@yourdomain.com"
+./test.sh
+```
+
+Each test gets a signed-in client from `TestSignIn.client()` and releases it with `TestSignIn.tearDown(_:)`; `ExampleTests.swift` is the one to copy.
+
+`./test.sh --primitive-env <name>` runs against another environment, and any other argument goes to `swift test`, so `./test.sh --filter ExampleTests` runs one test class.
+
+### One-time setup
+
+The test account signs in with the fixed code `000000`, which the server accepts only for an address your app has whitelisted and admits. On a fresh scaffold do both:
+
+1. **Whitelist a base address.** Add it to `[app]` in `primitive/<env>/app.toml` (run `primitive config pull --only app` first if the file isn't there), then push:
+
+   ```toml
+   [app]
+   testAccountBaseEmails = ["you@yourdomain.com"]
+   ```
+
+   ```bash
+   primitive config push --only app
+   ```
+
+   Any `you+primitivetest-<suffix>@yourdomain.com` address is then a test account. The base address itself never signs in this way. Keep one stable suffix, such as `+primitivetest-ios`, so every run reuses one test user.
+
+2. **Admit the test address.** A scaffold is invite-only unless `primitive init` was told otherwise, and a test account joins the app like any other sign-up. Invite the exact address once (no email is sent):
+
+   ```bash
+   primitive users invite <app-id> you+primitivetest-ios@yourdomain.com
+   ```
+
+   Or, if the app should be open to everyone, set `mode = "public"` under `[app]` in `app.toml` before the push.
+
+`./test.sh` exports your app's ID and server from the selected environment for the tests to read, the same way a build does.
+
+**Gotchas**
+
+- If step 2 is missing, sign-in fails with `OTP sign-in failed for <address>` and an underlying `INVITATION_REQUIRED`. Invite that exact address, or make the app public.
+- `./test.sh` stops before building when `PRIMITIVE_TEST_EMAIL` is unset. Export it in your shell profile or CI environment.
 
 ## Smoke-testing the UI
 

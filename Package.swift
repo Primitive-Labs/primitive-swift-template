@@ -42,6 +42,19 @@ let package = Package(
                 .plugin(name: "JsBaoCodegenPlugin", package: "swift-client"),
             ]
         ),
+        // The app's tests: `./test.sh` runs them on the Mac, signed in as the
+        // test account through `Tests/PrimitiveAppTemplateTests/Support/SignIn.swift`.
+        // They call the backend through the client, so the target does not
+        // depend on the app target. SwiftPM only: the Xcode project has no
+        // test bundle.
+        .testTarget(
+            name: "PrimitiveAppTemplateTests",
+            dependencies: [
+                .product(name: "PrimitiveAppTesting", package: "swift-primitive-app"),
+                .product(name: "JsBaoClient", package: "swift-client"),
+            ],
+            path: "Tests/PrimitiveAppTemplateTests"
+        ),
     ],
     // Swift 6 language mode for the whole package (#2310). Strict concurrency
     // checking is `complete` and its diagnostics are hard errors, matching the
