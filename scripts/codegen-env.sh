@@ -5,11 +5,11 @@
 # environment can be resolved. Always exits 0: "cannot tell" is an answer the
 # caller acts on, not a failure.
 #
-# WHY this exists (#3078). `scripts/codegen.sh` guards each CLI-driven codegen
+# WHY this exists (#3078). `scripts/codegen.sh` guards its CLI-driven codegen
 # on whether this app has that artifact class synced. The guard used to glob
-# EVERY environment (`primitive/*/workflows/*.toml`) while the CLI it
+# EVERY environment (`primitive/*/functions/*.toml`) while the CLI it
 # then invokes resolves exactly ONE and errors when that one's directory is
-# empty. An app with workflows synced under `alpha` while `dev` is selected
+# empty. An app with functions synced under `alpha` while `dev` is selected
 # therefore invoked the CLI for `dev` and failed. That was survivable while
 # codegen ran only on paths a developer chose; now it runs on every build path,
 # including Xcode's Run button, so the guard has to ask the same question the

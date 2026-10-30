@@ -136,65 +136,10 @@ log()  { printf '[smoke-test] %s\n' "$*" >&2; }
 fail() { printf '[smoke-test] FAIL: %s\n' "$*" >&2; return 1; }
 pass() { printf '[smoke-test] PASS: %s\n' "$*" >&2; }
 
-# Echo "<udid> <state>" for the device named $SIM_NAME, or nothing when this
-# machine has no such device. A Booted match wins, so a name that exists on
-# more than one runtime resolves to the one already running. The name is passed
-# through the environment rather than interpolated into the Python source: it
-# carries a bundle id and whatever PRIMITIVE_SMOKE_SIM was set to.
-sim_by_name() {
-    xcrun simctl list devices available -j \
-        | SMOKE_SIM_NAME="$SIM_NAME" python3 -c "
-import json, os, sys
-name = os.environ['SMOKE_SIM_NAME']
-devices = json.load(sys.stdin)['devices'].values()
-matches = [d for dl in devices for d in dl if d.get('name') == name]
-for d in sorted(matches, key=lambda d: d.get('state') != 'Booted'):
-    print(d['udid'], d.get('state', ''))
-    break
-" 2>/dev/null
-}
-
-# Echo the UDID of this app's dedicated simulator, creating it on first use and
-# booting it when it isn't already running. Selection is by name alone, so
-# another app's booted device is never adopted and re-runs stay on the same
-# device (#2971).
-boot_simulator() {
-    local udid state
-    read -r udid state <<<"$(sim_by_name)"
-    if [ -z "${udid:-}" ]; then
-        log "Creating simulator '$SIM_NAME' ($SIM_BASE_DEVICE)..."
-        # Checked explicitly for the same reason the boot below is: a failed
-        # create in a command substitution does not stop the run, and an empty
-        # UDID reaches `simctl install`/`launch` as "the booted device" — the
-        # wrong-device failure this whole function exists to prevent (#2971).
-        local create_err create_status=0
-        create_err="$(mktemp)"
-        udid=$(xcrun simctl create "$SIM_NAME" "$SIM_BASE_DEVICE" 2>"$create_err") \
-            || create_status=$?
-        if [ "$create_status" != "0" ] || [ -z "${udid:-}" ]; then
-            fail "Could not create simulator '$SIM_NAME' from device type '$SIM_BASE_DEVICE'."
-            sed 's/^/[smoke-test]   /' "$create_err" >&2
-            log "  Set PRIMITIVE_SMOKE_SIM_BASE to a device type this Xcode has"
-            log "  (see: xcrun simctl list devicetypes)."
-            rm -f "$create_err"
-            return 1
-        fi
-        rm -f "$create_err"
-        state="Shutdown"
-    fi
-    if [ "$state" != "Booted" ]; then
-        log "Booting '$SIM_NAME' ($udid)..."
-        # Checked explicitly: this function runs inside a command substitution,
-        # which does not inherit `set -e`, so a failed boot would otherwise fall
-        # through and echo a UDID nothing is running on.
-        if ! xcrun simctl boot "$udid"; then
-            fail "Could not boot simulator '$SIM_NAME' ($udid)."
-            return 1
-        fi
-        open -ga Simulator
-    fi
-    echo "$udid"
-}
+# sim_by_name and boot_simulator: the dedicated-simulator helpers this script
+# shares with ./ui-test.sh.
+# shellcheck source=scripts/simulator.sh
+source "scripts/simulator.sh"
 
 # Build for the booted simulator. Sets $APP_PATH to the built .app on success.
 #
@@ -209,10 +154,9 @@ boot_simulator() {
 build_for_simulator() {
     local udid="$1"
     APP_PATH=""
-    # Same Xcode build path as run-ios.sh: the SPM plugin never fires on it, so
-    # both codegens have to run by hand. Through the shared entry point, so
-    # this path cannot regenerate the models while compiling stale workflow
-    # factories — the #2895 bug in miniature. See scripts/codegen.sh.
+    # Same Xcode build path as run-ios.sh: codegen runs first, through the
+    # shared entry point, so the project regenerated below lists every
+    # emitted file. See scripts/codegen.sh.
     log "Running codegen..."
     bash scripts/codegen.sh >/dev/null
 
@@ -382,6 +326,35 @@ idb_wait_id() {
     local deadline=$(( $(date +%s) + timeout ))
     while [ "$(date +%s)" -lt "$deadline" ]; do
         if idb_center_of "$target_id" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
+# Poll describe-all for up to $1 seconds until one of the identifiers after it
+# appears, and echo the first of them (in argument order) that is present.
+# Returns non-zero on timeout.
+idb_wait_any() {
+    local timeout="$1"
+    shift
+    local deadline=$(( $(date +%s) + timeout ))
+    local found
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+        if found=$(idb_cmd ui describe-all 2>/dev/null | SMOKE_IDS="$*" python3 -c "
+import json, os, sys
+try:
+    present = {e.get('AXUniqueId') for e in json.load(sys.stdin)}
+except Exception:
+    sys.exit(2)
+for tid in os.environ['SMOKE_IDS'].split():
+    if tid in present:
+        print(tid)
+        sys.exit(0)
+sys.exit(1)
+"); then
+            echo "$found"
             return 0
         fi
         sleep 1
@@ -687,8 +660,7 @@ EOF
 # ui_signin: the idb-driven UI smoke test. Signs in end-to-end through the
 # +primitivetest OTP bypass and asserts the post-login screen renders.
 # This closes the gap the plain `launch_survive` can't reach: driving the
-# app's SwiftUI form (tap, type, submit), which needs idb. It complements
-# the Debug Inspector — idb drives the UI, the Inspector asserts state.
+# app's SwiftUI form (tap, type, submit), which needs idb.
 scenario_ui_signin() {
     local udid="$1"
     local app_path="$2"
@@ -708,15 +680,8 @@ scenario_ui_signin() {
 
     start_idb_companion "$udid" || { fail "could not start idb companion"; return 1; }
 
-    # Launch with the Debug Inspector disabled. In a Debug build it starts a
-    # Bonjour listener, which triggers the first-launch iOS Local Network
-    # permission alert on a clean simulator — a system alert that would cover
-    # the login form before the scenario can reach it. ui_signin drives the UI
-    # directly and doesn't need the inspector. `SIMCTL_CHILD_<VAR>` passes VAR
-    # into the launched app's environment; the app reads PRIMITIVE_DEBUG_INSPECTOR.
-    log "Launching $BUNDLE_ID (debug inspector disabled)..."
-    SIMCTL_CHILD_PRIMITIVE_DEBUG_INSPECTOR=0 \
-        xcrun simctl launch "$udid" "$BUNDLE_ID" >/dev/null
+    log "Launching $BUNDLE_ID..."
+    xcrun simctl launch "$udid" "$BUNDLE_ID" >/dev/null
 
     # 1. Login screen — the email field renders.
     if ! idb_wait_id "primitive.login.emailField" 30; then
@@ -736,11 +701,24 @@ scenario_ui_signin() {
     idb_cmd ui text "000000"
     idb_tap_id "primitive.login.otpVerify" || { fail "could not tap verify"; dump_ui_state "$udid" verify; return 1; }
 
-    # 3. Passkey-enrollment sheet may appear after OTP sign-in — dismiss it.
-    if idb_wait_id "primitive.passkey.notNow" 8; then
-        log "Dismissing passkey-enrollment sheet..."
-        idb_tap_id "primitive.passkey.notNow" || true
-    fi
+    # 3. A new account gets the onboarding sheet: Continue past the name step
+    # (a blank name is allowed), then Not Now on the passkey step when it
+    # shows. A returning account goes straight to the post-login screen.
+    local seen taps=0
+    while [ "$taps" -lt 10 ] \
+        && seen=$(idb_wait_any 30 "primitive.onboarding.continue" "primitive.passkey.notNow" "$SUCCESS_ID"); do
+        case "$seen" in
+            primitive.onboarding.continue)
+                log "Continuing past the onboarding name step..."
+                idb_tap_id "primitive.onboarding.continue" || true ;;
+            primitive.passkey.notNow)
+                log "Dismissing the onboarding passkey step..."
+                idb_tap_id "primitive.passkey.notNow" || true ;;
+            *) break ;;
+        esac
+        taps=$((taps + 1))
+        sleep 1
+    done
 
     # 4. Post-login screen renders.
     log "Waiting for post-login element '$SUCCESS_ID'..."
@@ -804,7 +782,7 @@ if [ -n "${PRIMITIVE_SMOKE_PREFLIGHT_ONLY:-}" ]; then
 fi
 
 log "Booting simulator..."
-UDID=$(boot_simulator)
+UDID=$(boot_simulator "$SIM_NAME" "$SIM_BASE_DEVICE" PRIMITIVE_SMOKE_SIM_BASE)
 log "Using simulator: $UDID"
 
 # Not a command substitution: `set -e` has to reach every command the build

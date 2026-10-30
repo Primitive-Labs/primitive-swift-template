@@ -1,9 +1,9 @@
 import SwiftUI
 
 /// Bottom-anchored toast for per-mutation errors that shouldn't take
-/// over the whole screen. Pairs with `TemplateAppState.transientError`
-/// and `setTransientError(_:)` — see the docstring there for when to
-/// use this vs. the full-screen alert backed by `errorMessage`.
+/// over the whole screen. Pairs with `AppState.transientError` and
+/// `setTransientError(_:)` — see the comment there for when to use this
+/// vs. the full-screen alert backed by `errorMessage`.
 ///
 /// Wire it into the root view with an overlay:
 ///

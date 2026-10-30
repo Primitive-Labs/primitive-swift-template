@@ -4,8 +4,8 @@ description: >
   Idiomatic iOS / SwiftUI UI conventions for Primitive Swift apps. Triggers
   whenever a SwiftUI file (`.swift` containing `View`, `@StateObject`,
   `@EnvironmentObject`, `NavigationStack`, `List`, etc.) is being edited
-  inside a `swift-primitive-app`-based project (detected by the presence of
-  `PrimitiveAppTemplate`, `PrimitiveApp`, or `JsBaoClient` imports). Catches
+  inside a Primitive Swift app (detected by `JsBaoClient` imports or the
+  template's `AppState` / `BaoDataLoader` types). Catches
   the multi-platform-gating, long-press-menu, foregroundStyle, permission-
   gating and other common Swift-side UI mistakes that the `primitive-platform`
   data-side skill doesn't cover. Use proactively after any SwiftUI edit; do
@@ -21,7 +21,7 @@ layer — the conventions iOS users expect and the cross-platform gates the
 template defaults to (iOS + macOS) require.
 
 Use this skill any time you edit a `.swift` file containing SwiftUI types
-in a project that imports `PrimitiveApp` / `JsBaoClient`. Run the
+in a project that imports `JsBaoClient`. Run the
 verification checklist at the end of every UI-editing session.
 
 ## When to trigger
@@ -33,11 +33,12 @@ verification checklist at the end of every UI-editing session.
 - After scaffolding a new SwiftUI view from any source.
 
 Skip when:
-- Editing pure data/model files (`models.toml`, `*Record.swift`, app-state
-  business logic) — the `primitive-platform` skill covers those.
+- Editing pure data/model files (the db3 type schema named in
+  `bao-codegen.json`, `Models/Generated/**`, app-state business logic) — the
+  `primitive-platform` skill covers those.
 - Editing tests.
-- The project is not Primitive-based (no `PrimitiveApp` / `JsBaoClient`
-  imports anywhere in `Sources/`).
+- The project is not Primitive-based (no `JsBaoClient` imports anywhere in
+  `Sources/`).
 
 ## Rules
 
@@ -121,8 +122,8 @@ case .loaded(let d):  List(d) { … }
 }
 ```
 
-If for some reason `phase` isn't available (older PrimitiveApp version),
-gate manually on `loader.initialDataLoaded`:
+When a branch needs more than the three cases (say, a stale-while-loading
+view), gate manually on `loader.initialDataLoaded`:
 
 ```swift
 if !loader.initialDataLoaded { ProgressView() }
@@ -190,41 +191,53 @@ Button { pendingShare = .document(documentId: ref.documentId, title: ref.title) 
 Make `Target` `Identifiable` if it isn't already (computed `id` based on
 the discriminator + payload id).
 
-### 7. Detail views auto-pop when the open document is deleted
+### 7. Detail views auto-pop when their db3 goes away
 
-When a detail view opens a document, subscribe to `.documentMetadataChanged`,
-gate on `action == "deleted"`, and pop the view on match:
+When a detail view reads one db3, observe `Db3GoneEvent` for that id and pop
+the view when the room refused this user access:
 
 ```swift
 @Environment(\.dismiss) private var dismiss
-@State private var deletedSub: EventSubscription?
+@State private var goneSub: EventSubscription?
 
 .task {
     // `observeOnMainActor`'s handler already runs on the main actor, so no
     // `Task { @MainActor in … }` wrapper. A `View` is a struct, so capture the
     // values the handler needs rather than `[weak self]`.
-    let documentId = self.documentId
-    deletedSub = appState.client?.observeOnMainActor(DocumentMetadataChangedEvent.self) { ev in
-        guard ev.action == "deleted", ev.documentId == documentId else { return }
+    let db3Id = self.db3Id
+    goneSub = appState.client?.observeOnMainActor(Db3GoneEvent.self) { ev in
+        guard ev.id == db3Id, ev.reason == .permission else { return }
         dismiss()
     }
 }
-.onDisappear { deletedSub?.cancel() }
+.onDisappear { goneSub?.cancel() }
 ```
 
-`.documentMetadataChanged` fires for every metadata transition — its `action`
-is one of `"created"`, `"updated"`, `"deleted"`, or `"evicted"` — so check for
-`action == "deleted"` to pop only when this document is actually deleted or
-revoked (the server clears the metadata and sends `action == "deleted"` for
-both). Without this, deleting a doc on another device (or being unshared)
-leaves the user staring at stale data until they navigate away manually.
+`Db3GoneEvent` fires when the room stops syncing that db3 with this client.
+Only `.permission` (a revoked grant) means the user has lost it; on
+`.syncOff` and `.clientOutdated` the rows stay readable, so keep the view and
+show the state instead. Without this, being unshared leaves the user staring
+at stale data until they navigate away manually. A `BaoDataLoader` bound with the default
+`.onDb3Events` trigger already reloads on the same event, so list views
+refresh on their own; only the detail view needs to leave.
 
-### 8. Multi-doc apps: openAuxiliaryDoc, not selectDocumentAwaiting
+### 8. Multi-db3 apps: subscribe through `AppState`, once per db3
 
-If the app keeps an ambient library/index doc open and opens per-item
-docs in detail views, use `appState.openAuxiliaryDoc(_:modelType:)` /
-`closeAuxiliaryDoc(_:)`. `selectDocumentAwaiting(_:)` would close the
-library doc.
+If the app keeps an ambient library/index db3 and opens per-item db3s in
+detail views, subscribe to each through `appState.subscribe(db3:)` and await
+`ready()` before reading:
+
+```swift
+let item = try appState.subscribe(db3: itemDb3Id)
+try await item.ready()
+```
+
+`AppState` tracks the subscription and, at sign-out, disposes it and evicts
+the db3 from the device, so the next account never sees it. Calling
+`client.db3.subscribe` directly skips that cleanup. Keep one subscription per
+db3 id for the session (cache it on your app state by id) rather than
+subscribing again on every `.task`; each call adds another tracked
+subscription.
 
 ### 9. Forms that take an email
 
@@ -392,10 +405,10 @@ Run after every SwiftUI editing session:
       reconcile), not on `canEdit`.
 - [ ] Item-targeted sheets use `.sheet(item:)`, not
       `.sheet(isPresented:) + @State selection`.
-- [ ] Detail views opening a single doc subscribe to `.documentMetadataChanged` and pop on `action == "deleted"`
-      and pop on match.
-- [ ] Multi-doc apps use `openAuxiliaryDoc` (NOT `selectDocumentAwaiting`)
-      for transient detail-view docs.
+- [ ] Detail views reading a single db3 observe `Db3GoneEvent` and pop when
+      its `id` matches and `reason == .permission`.
+- [ ] Per-item db3s are subscribed through `appState.subscribe(db3:)`, once
+      per id, and awaited with `ready()` before reading.
 - [ ] Email `TextField`s have `.keyboardType(.emailAddress)` +
       `.textInputAutocapitalization(.never)` (iOS-gated) +
       `.autocorrectionDisabled()`.

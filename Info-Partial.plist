@@ -3,62 +3,51 @@
 <plist version="1.0">
 <dict>
 	<!--
-	  DebugInspector advertises its HTTP server over Bonjour so iOS prompts for the
-	  Local Network permission on first launch. Without this key in Info.plist the
-	  prompt never appears and iOS silently drops LAN traffic to/from the app.
-	  The rest of Info.plist is auto-generated from INFOPLIST_KEY_* build settings;
-	  Xcode merges that generated content onto this base file.
-	-->
-	<key>NSBonjourServices</key>
-	<array>
-		<string>_primitive-inspector._tcp</string>
-	</array>
-	<!--
-	  This app's own URL scheme, under the CFBundleURLName PrimitiveAuth that
-	  PrimitiveAuthManager reads its callback scheme from. `primitive init`
-	  stamps an app-unique scheme in place of `primitiveapp` — every app
-	  scaffolded from this template would otherwise register the same one, and
-	  iOS picks arbitrarily between two apps claiming a scheme.
+	  The rest of Info.plist is generated from the INFOPLIST_KEY_* build
+	  settings in project.yml; Xcode merges that generated content onto this
+	  base file, which holds what the generator cannot express.
+
+	  This app's own URL scheme, under the URL type named PrimitiveAuth.
+	  `primitive init` stamps an app-unique scheme in place of `primitiveapp`:
+	  every app scaffolded from this template would otherwise register the same
+	  one, and iOS picks arbitrarily between two apps claiming a scheme.
 
 	  Sign-in email: CODE-ONLY BY DEFAULT, and that works with no configuration
-	  at all — the manager sends no redirect target, so the server never
-	  consults the allow-list.
+	  at all. The client sends no link target, so the server never consults the
+	  allow-list.
 
-	  IF THIS APP HAS A WEB COUNTERPART, prefer the https link over the custom
-	  scheme below: add "webUrl": "https://your-web-domain" to the environment
-	  in primitive/config.json (a bare origin; `primitive env add` takes a
-	  web-url option when it CREATES an environment, but cannot edit one that
-	  already exists) and the sign-in email carries
-	  "https://your-web-domain/oauth/callback" instead. That one link
-	  opens THIS app when it is installed (a universal link, once the domain
-	  serves apple-app-site-association and the applinks entitlement names it)
-	  and is an ordinary web sign-in in any browser. Allow-list that https URL
-	  the same way. The full checklist is in the authentication guide.
+	  IF THIS APP HAS A WEB COUNTERPART, prefer the https link: add
+	  "webUrl": "https://your-web-domain" to the environment in
+	  primitive/config.json (a bare origin) and the sign-in email carries
+	  "https://your-web-domain/oauth/callback". That one link opens THIS app
+	  when it is installed (a universal link, once the domain serves
+	  apple-app-site-association and the applinks entitlement names it) and is
+	  an ordinary web sign-in in any browser. Allow-list that https URL the
+	  same way. The full checklist is in the authentication guide.
 
-	  Turning the custom-scheme LINK on instead takes two steps:
+	  A custom-scheme LINK instead takes two steps, and no source edit:
 
-	    1. Merge "<scheme>://auth/magic-link" into the existing
-	       [auth].emailRedirectUris array in your app's config/app.toml and
-	       push the app settings with `primitive config push` (its option flag
-	       spells a double hyphen, which an XML comment cannot contain — the
-	       exact command is in the authentication guide).
-	    2. Set `authManager.sendsEmailSignInLink = true` before sign-in.
+	    1. Merge "<scheme>://oauth/callback" into the existing
+	       [auth].emailRedirectUris array in your app's app.toml and push the
+	       app settings with `primitive config push` (its option flag spells a
+	       double hyphen, which an XML comment cannot contain; the exact
+	       command is in docs/README.md).
+	    2. Add the PrimitiveOAuthRedirectURI key below this comment, with the
+	       same "<scheme>://oauth/callback" as its string. The app passes it
+	       to the client as its oauthRedirectUri, which points the emailed
+	       link there and accepts the callback when it comes back.
 
 	  What each missing piece looks like, so a half-wired app is diagnosable:
-	    - flag on, URI not allow-listed  → EVERY email request fails 400
+	    - key set, URI not allow-listed  → EVERY email request fails 400
 	                                       `Invalid redirect URI`
-	    - allow-listed, scheme not here  → the emailed link is a dead tap;
+	    - allow-listed, key not set      → the email stays code-only
+	    - scheme not registered here     → the emailed link is a dead tap;
 	                                       nothing launches, nothing logs
-	    - registered, nothing routing it → the app opens and no one signs in
-	                                       (ContentView's .onOpenURL →
-	                                       routePlatformLink does the routing)
 
 	  A custom-scheme link only opens on a device that has this app installed:
 	  dead in the Simulator, dead cross-device, and most webmail clients will
-	  not render a non-http(s) href as a link — which is exactly what the https
-	  link above fixes. The code is the credential that always works. The same
-	  scheme carries the OAuth callback ("<scheme>://oauth/callback") when you
-	  use `startOAuth()`.
+	  not render a non-http(s) href as a link, which is exactly what the https
+	  link above fixes. The code is the credential that always works.
 	-->
 	<key>CFBundleURLTypes</key>
 	<array>

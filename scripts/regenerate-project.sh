@@ -4,10 +4,10 @@
 # Those steps are always one operation, in this order:
 #
 #   scripts/codegen.sh
-#       emits every generated class — the model types, the workflow factories
-#       and the function invokers — into the source tree. xcodegen can only list a
-#       file that is already on disk, so a newly declared model or a newly
-#       synced workflow has to be emitted first (#3009, widened by #3078).
+#       emits every generated class — the model types and the function
+#       invokers — into the source tree. xcodegen can only list a file that is
+#       already on disk, so a newly declared model or a newly synced function
+#       has to be emitted first (#3009, widened by #3078).
 #
 #   xcodegen generate
 #       rewrites <App>.xcodeproj from project.yml, so newly added sources
@@ -23,7 +23,7 @@
 # and the fastlane lanes — goes through this script instead of repeating the
 # sequence, so the order and the error policy are defined in one place.
 #
-# ALL THREE generated classes belong here (#3078), not the models alone.
+# Every generated class belongs here (#3078), not the models alone.
 # Generated code is code: it is committed, and every build path regenerates it
 # so a schema change is a working-tree diff the developer commits with the
 # change. Centralizing it here is what covers `pnpm swift:xcodegen`, archive.sh
@@ -67,7 +67,7 @@ if ! command -v xcodegen >/dev/null 2>&1; then
 fi
 
 # Emit everything BEFORE xcodegen scans for sources (#3009, #3078). A model the
-# schema just declared, or a workflow the developer just synced, is a file the
+# type just declared, or a function the developer just synced, is a file the
 # project has to list — and xcodegen lists the files that exist when it runs.
 # Emitting after the scan produces a project missing the new type, which then
 # fails the Xcode build's verification and tells the developer to run the

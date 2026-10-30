@@ -1,20 +1,19 @@
 import SwiftUI
-import PrimitiveApp
 import JsBaoClient
 
 struct ContentView: View {
-    @EnvironmentObject var appState: TemplateAppState
+    @EnvironmentObject var appState: AppState
+    @State private var acceptedInvitation = false
 
     var body: some View {
-        AuthGateView(appState: appState, appName: "Primitive Template", authManager: appState.authManager) {
+        AuthGate(appState: appState, appName: "Primitive Template") {
             AppTabView()
         }
         .task {
             await appState.initialize()
         }
-        // `errorMessage` is the FATAL channel — full-screen alert, user
-        // must dismiss before continuing. Use for connection / config /
-        // open-doc failures where the app genuinely can't proceed.
+        // `errorMessage` is the FATAL channel: an alert the user dismisses.
+        // For a missing configuration or a connection that never came up.
         .alert("Error", isPresented: .init(
             get: { appState.errorMessage != nil },
             set: { if !$0 { appState.errorMessage = nil } }
@@ -23,47 +22,35 @@ struct ContentView: View {
         } message: {
             Text(appState.errorMessage ?? "")
         }
-        // `transientError` is the PER-MUTATION channel — bottom-anchored
-        // toast that auto-dismisses. Use for `try todos.create(...)`
-        // throws and other recoverable failures the user doesn't need
-        // to block on. See `TemplateAppState.setTransientError(...)`.
+        .alert("Invitation accepted", isPresented: $acceptedInvitation) {
+            Button("OK") {}
+                // Stable identifier for UI automation: the XCUITest invite
+                // flow (UITests/) waits for it after opening an invite link.
+                .accessibilityIdentifier("primitive.invite.accepted")
+        }
+        // `transientError` is the PER-MUTATION channel: a toast that
+        // dismisses itself. Set it with `appState.setTransientError(_:)`.
         .overlay(alignment: .bottom) {
             TransientErrorToast(message: appState.transientError) {
                 appState.transientError = nil
             }
         }
-        // Incoming links (deep links / universal links / notification-tap
-        // URLs). Primitive's own link shapes get default handling via the
-        // library — document share links open, invitation links are
-        // accepted, magic links sign in. Web links are trusted only after
-        // you set `appState.client?.links.appBaseURL` or `trustedLinkHosts`;
-        // custom-scheme links are OS-scoped and work without that.
-        // `.notAPlatformLink` is where your app's own routes go.
+        // Incoming links. Two transports deliver them: the app's custom URL
+        // scheme (registered in Info-Partial.plist; `primitive init` stamps an
+        // app-unique one) through `.onOpenURL`, and universal links (https on
+        // the web origin `webUrl` names) as a browsing activity, which is the
+        // only delivery on macOS. Both go to `routePlatformLink`: invitations
+        // are accepted, emailed sign-in links sign in, and your own routes go
+        // in the `.notAPlatformLink` branch.
         //
-        // To actually RECEIVE links you need at least one transport. This
-        // template ships one: the custom URL scheme registered under the
-        // `PrimitiveAuth` URL type in Info-Partial.plist, which is also the
-        // scheme `PrimitiveAuthManager` uses (and which `primitive init`
-        // stamps app-unique). Universal links (`applinks:` associated domain
-        // + your web domain serving apple-app-site-association) are the other
-        // transport; the demo app's Deep Links page walks through both.
-        //
-        // The sign-in EMAIL is code-only until the app has a link target. Give
-        // the environment a `webUrl` in primitive/config.json and the email
-        // carries that origin's https callback — a universal link on a device
-        // with this app installed, a web sign-in anywhere else (#2982). With
-        // no web counterpart the opt-in is the custom scheme: set
-        // `authManager.sendsEmailSignInLink = true` and allow-list
-        // `<scheme>://auth/magic-link` in your app's `[auth].emailRedirectUris`.
-        // The checklist, and what each missing piece looks like, is in
-        // Info-Partial.plist and in the authentication guide.
+        // The sign-in email is code-only until the app has a link target: a
+        // `webUrl` in primitive/config.json (an https link that opens this app
+        // or signs in on the web), or the `PrimitiveOAuthRedirectURI`
+        // Info.plist key for a custom-scheme link. docs/README.md
+        // ("Sign-in links") has the setup.
         .onOpenURL { url in
             route(url)
         }
-        // Universal links (https) arrive as a browsing activity, not through
-        // `.onOpenURL` — that is the ONLY delivery on macOS, and it is also
-        // how a link handed off from another device arrives. Without this the
-        // app opens and the sign-in link does nothing.
         .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
             guard let url = activity.webpageURL else { return }
             route(url)
@@ -74,8 +61,12 @@ struct ContentView: View {
     private func route(_ url: URL) {
         Task {
             do {
-                let outcome = try await appState.routePlatformLink(url)
-                if case .notAPlatformLink(let unhandled) = outcome {
+                switch try await appState.routePlatformLink(url) {
+                case .acceptedInvitation:
+                    acceptedInvitation = true
+                case .signedIn:
+                    break
+                case .notAPlatformLink(let unhandled):
                     // TODO: your app-specific routes go here, e.g.
                     // `myapp://settings` → open the settings screen.
                     appState.setTransientError("No route for link: \(unhandled.absoluteString)")
@@ -88,7 +79,7 @@ struct ContentView: View {
 }
 
 struct AppTabView: View {
-    @EnvironmentObject var appState: TemplateAppState
+    @EnvironmentObject var appState: AppState
 
     var body: some View {
         TabView {
@@ -98,7 +89,7 @@ struct AppTabView: View {
             .tabItem { Label("Home", systemImage: "house") }
 
             NavigationStack {
-                PrimitiveProfileView(appState: appState, authManager: appState.authManager)
+                ProfileView(appState: appState)
             }
             .tabItem { Label("Profile", systemImage: "person.circle") }
         }
@@ -107,23 +98,27 @@ struct AppTabView: View {
 
 // MARK: - Home — replace this with your app's main view.
 //
-// `appState` is the `TemplateAppState` subclass of `PrimitiveAppState`.
-// Once you've added a model to `Models/models.toml` and bound it in
-// `TemplateAppState.onDocumentOpened`, you read from it here — e.g.:
+// Your data lives in db3s. Declare a type in
+// `primitive/<env>/db3-types/<name>.toml`, name it in
+// `Sources/PrimitiveAppTemplate/bao-codegen.json`, push the config, and the
+// build generates its models. Then subscribe and load, e.g.:
 //
-//   @StateObject private var loader = BaoDataLoader<[ItemRecord]>()
+//   @StateObject private var loader = BaoDataLoader<[Contact]>()
 //   ...
 //   .task {
-//       loader.bind(client: appState.client, subscribeTo: [.onModel(subscribe: ItemRecord.subscribe)]) { _ in
-//           try ItemRecord.findAll().sorted { $0.createdAt > $1.createdAt }
+//       let sub = try? appState.subscribe(db3: contactsId)
+//       try? await sub?.ready()
+//       loader.bind(client: appState.client,
+//                   subscribeTo: [.onDb3Events, .onModel(subscribe: Contact.subscribe)]) { _ in
+//           try Contact.findAll()
 //       }
 //   }
 //
-// See the agent guide (`primitive guides get documents --language swift`)
-// for the full pattern including writes, queries, and reactivity.
+// The databases guide has the full pattern:
+// `primitive guides get databases --language swift`.
 
 struct HomeView: View {
-    @EnvironmentObject var appState: TemplateAppState
+    @EnvironmentObject var appState: AppState
 
     var body: some View {
         VStack(spacing: 16) {
@@ -143,7 +138,7 @@ struct HomeView: View {
             Text("Your app here")
                 .font(.title2)
                 .fontWeight(.medium)
-            Text("Edit `Views/ContentView.swift` to replace this view, then add models to `Models/models.toml` and bind them in `TemplateAppState.onDocumentOpened`.")
+            Text("Edit `Views/ContentView.swift` to replace this view. Declare a db3 type and name it in `bao-codegen.json` to generate your models.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -151,11 +146,10 @@ struct HomeView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle("Home")
-        // Stable identifier for the post-login smoke test: the idb
-        // `ui_signin` scenario (`scripts/smoke-test.sh`) asserts this
-        // element renders after sign-in. If you replace this view, either
-        // keep the identifier or point the scenario at your own screen via
-        // PRIMITIVE_SMOKE_SUCCESS_ID. See the DevTools agent guide.
+        // Stable identifier for UI automation: the idb `ui_signin` scenario
+        // (`scripts/smoke-test.sh`) asserts this element renders after
+        // sign-in. If you replace this view, keep the identifier or point the
+        // scenario at your own screen with PRIMITIVE_SMOKE_SUCCESS_ID.
         .accessibilityIdentifier("primitive.template.home")
     }
 }

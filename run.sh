@@ -32,14 +32,10 @@ bash scripts/resolve-primitive-config.sh
 # ────────────────────────────────────────────────────────────────────────────
 # Codegen — mirror to source tree for SourceKit
 # ────────────────────────────────────────────────────────────────────────────
-# `swift run` below triggers `swift build`, which runs `JsBaoCodegenPlugin`
-# automatically and emits the MODELS into the SPM plugin work dir — fine for
-# the compiler. SourceKit (Xcode / VS Code) reads the *source tree* though, so
-# without a checked-in `Models/Generated/<Type>.swift`, editor diagnostics
-# can't find generated types and surface confusing errors like
-# "No such module 'PrimitiveApp'" against companion `+Extensions.swift`
-# files. And no build path regenerates the WORKFLOW factories at all. Both
-# live in the shared entry point — see its header.
+# `swift run` below triggers `swift build`, which compiles the committed
+# `Models/Generated/` and `Functions/Generated/` and runs no codegen of its own.
+# The shared entry point regenerates them into the source tree first, where the
+# compiler and SourceKit (Xcode / VS Code) both read them — see its header.
 bash scripts/codegen.sh
 
 swift run primitive-app-template ${APP_ARGS+"${APP_ARGS[@]}"}

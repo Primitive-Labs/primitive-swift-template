@@ -1,5 +1,4 @@
 import SwiftUI
-import PrimitiveApp
 
 #if os(macOS)
 import AppKit
@@ -7,11 +6,9 @@ import AppKit
 
 @main
 struct PrimitiveAppTemplateApp: App {
-    // `TemplateAppState` is a subclass of `PrimitiveAppState` that
-    // adds the per-user singleton-doc setup and model loading.
-    // See TemplateAppState.swift. Replace with your own subclass when
-    // you customize the data model.
-    @StateObject private var appState = TemplateAppState()
+    // The app's state: the client, sign-in, the profile and the db3s the app
+    // reads. See App/AppState.swift.
+    @StateObject private var appState = AppState()
 
     init() {
         #if os(macOS)

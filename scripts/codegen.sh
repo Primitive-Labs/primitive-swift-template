@@ -1,40 +1,32 @@
 #!/bin/bash
-# Regenerate every piece of generated Swift this app has: the model types, the
-# workflow factories and the server-function invokers. ONE entry point, the way
-# the Vue template funnels `js-bao-codegen-v2` + `primitive workflows codegen`
+# Regenerate every piece of generated Swift this app has: the model types (from
+# the db3 type `Sources/<App>/bao-codegen.json` names) and the server-function
+# invokers. ONE entry point, the way the web template funnels its generators
 # through a single `pnpm codegen` that `dev`, `build` and `test` all depend on.
 #
-# Why an entry point rather than a call per generator per build script: the
-# codegens fire on different paths and that is exactly how the workflow half
-# went missing (#2895). `swift build` runs `JsBaoCodegenPlugin` for the models,
-# so the SwiftPM path was covered; the Xcode target compiles its own source
-# list from `.pbxproj` and never runs the plugin, so `run-ios.sh` called the
-# model codegen by hand. Nothing anywhere called `primitive workflows codegen`,
-# and because the factories are COMMITTED every build kept compiling whatever
-# was in the tree — stale factories against a changed schema or an upgraded CLI
-# produced no error at all. With one script, a build path that regenerates
-# models cannot skip the rest.
+# It is the one codegen owner: every scripted build path (`./build.sh`,
+# `./run.sh`, `./run-ios.sh`, `./test.sh`, and `./archive.sh` and the fastlane
+# lanes through `scripts/regenerate-project.sh`) and the Xcode target's
+# pre-build phase run it first. A bare `swift build` runs no codegen and
+# compiles what is committed.
 #
-# GENERATED CODE IS CODE (#3078). All three classes are committed, reviewed and
-# tested like any other source, and this script runs on every build path — the
-# app build, every Xcode entry point, the test run — so a schema change shows up
-# as a working-tree diff the developer commits with the change. There is no
-# drift gate any more: the `--check` mode this script used to carry, and the
-# release-time refusal `archive.sh` built on it, are removed rather than
-# relocated. Enforcement is the loop itself.
+# GENERATED CODE IS CODE (#3078). Both classes are committed, reviewed and
+# tested like any other source, and this script runs on every build path, so a
+# schema change shows up as a working-tree diff the developer commits with the
+# change. There is no drift gate: enforcement is the loop itself.
 #
 # Usage:
-#   bash scripts/codegen.sh                    regenerate models + workflow
-#                                              factories + function invokers
+#   bash scripts/codegen.sh                    regenerate models + function
+#                                              invokers
 #   bash scripts/codegen.sh --verify-project   …and then fail if the committed
 #                                              .xcodeproj does not compile
 #                                              exactly what was emitted
 #
-# The order is generate-all-three, refresh the declared file lists, verify all
-# three, stamp. Verification LAST is deliberate (#3078): a class whose project
-# entry is missing must not stop another class from regenerating, and a failing
-# check must still leave the regenerated output in the working tree — that diff
-# is what the developer reviews and commits.
+# The order is generate both, refresh the declared file lists, verify both,
+# stamp. Verification LAST is deliberate: a class whose project entry is
+# missing must not stop the other from regenerating, and a failing check must
+# still leave the regenerated output in the working tree — that diff is what
+# the developer reviews and commits.
 #
 # Progress goes to stderr, so a caller capturing stdout gets nothing from here:
 # `scripts/regenerate-project.sh` runs this script and is itself run inside a
@@ -54,7 +46,6 @@ while [ $# -gt 0 ]; do
 done
 
 APP_SOURCES="Sources/PrimitiveAppTemplate"
-WORKFLOW_GEN_DIR="$APP_SOURCES/Workflows/Generated"
 FUNCTIONS_GEN_DIR="$APP_SOURCES/Functions/Generated"
 MODELS_GEN_DIR="$APP_SOURCES/Models/Generated"
 
@@ -74,7 +65,7 @@ OUTPUTS_LIST="scripts/codegen-outputs.xcfilelist"
 # point including the Run button (#3078). Xcode's GUI build phases run with a
 # minimal PATH that carries neither the `primitive` CLI nor node, so
 # `command -v primitive` alone would fail every GUI build of an app with synced
-# workflows or functions — telling the developer to install something they
+# functions — telling the developer to install something they
 # already have. So probe, the way `scripts/generate-models.sh` already reaches
 # past the environment Xcode hands it.
 #
@@ -83,7 +74,7 @@ OUTPUTS_LIST="scripts/codegen-outputs.xcfilelist"
 # published package. Preferring the installed one keeps a developer's own
 # version — including a locally built one — authoritative.
 #
-# Resolved lazily: an app that has synced neither class never needs any of it,
+# Resolved lazily: an app that has synced no functions never needs any of it,
 # on any path, and must not be told otherwise.
 CLI_BIN=""
 CLI_NPX_SPEC=""
@@ -205,7 +196,7 @@ cli_exec_path() {
     printf '%s' "$dirs"
 }
 
-# One call shape for both, so the two halves below read the same either way.
+# One call shape for both, so the call below reads the same either way.
 run_cli() {
     [ -n "$CLI_EXEC_PATH" ] || CLI_EXEC_PATH="$(cli_exec_path)"
     if [ -n "$CLI_NPX_SPEC" ]; then
@@ -218,10 +209,10 @@ run_cli() {
 # ────────────────────────────────────────────────────────────────────────────
 # Which schema
 # ────────────────────────────────────────────────────────────────────────────
-# Two lines from the model half: the schema it resolved, and the app source
-# directory it resolved it for. Both go into the declared input list below.
-# Asking rather than repeating the resolution keeps ONE implementation of the
-# `bao-codegen.json` indirection that lets several clients share a schema.
+# Two lines from the model half: the db3 type file `bao-codegen.json` names
+# (empty when it names none), and the app source directory it resolved it
+# for. Both go into the declared input list below. Asking rather than
+# repeating the resolution keeps ONE reader of `bao-codegen.json`.
 SCHEMA_INFO="$(bash scripts/generate-models.sh --print-schema)"
 SCHEMA_TOML="$(printf '%s\n' "$SCHEMA_INFO" | sed -n '1p')"
 SCHEMA_APP_SOURCES="$(printf '%s\n' "$SCHEMA_INFO" | sed -n '2p')"
@@ -229,9 +220,8 @@ SCHEMA_APP_SOURCES="$(printf '%s\n' "$SCHEMA_INFO" | sed -n '2p')"
 # ────────────────────────────────────────────────────────────────────────────
 # Models
 # ────────────────────────────────────────────────────────────────────────────
-# Emitted into the source tree (not just the SPM plugin work dir) so SourceKit
-# — Xcode and VS Code both read the tree, not the build graph — can resolve the
-# generated types, and so xcodegen scans them into the .pbxproj.
+# Emitted into the source tree, where the SwiftPM build, SourceKit (Xcode and
+# VS Code) and xcodegen's source scan all read them.
 #
 # Delegated to `scripts/generate-models.sh` rather than invoking the codegen
 # tool here, so this path and the Xcode target's pre-build phase (#2886) share
@@ -240,29 +230,23 @@ SCHEMA_APP_SOURCES="$(printf '%s\n' "$SCHEMA_INFO" | sed -n '2p')"
 # rather than assuming the template's own name.
 #
 # `--verify-project` is deliberately off here: verification runs at the END of
-# this script, across all three directories at once.
+# this script, across both directories at once.
 #
 # DERIVED_FILE_DIR is cleared for the child: with it set, the inner script
 # writes its own `models-codegen.stamp` at its own end, which on a run that then
-# fails in the workflow half would leave a mark of progress behind. This script
+# fails in the function half would leave a mark of progress behind. This script
 # owns the one stamp the phase declares, and writes it last (#3078).
 DERIVED_FILE_DIR="" bash scripts/generate-models.sh
 
 # ────────────────────────────────────────────────────────────────────────────
-# Workflow factories
+# The project
 # ────────────────────────────────────────────────────────────────────────────
-# Only when this app has synced workflows: a freshly scaffolded app has no
-# `<project root>/primitive/<env>/workflows/*.toml` at all, and
-# `primitive workflows codegen` exits non-zero with "No workflows/*.toml files
-# found" — which must not fail a build that has nothing to generate. Same guard
-# shape the Vue template's `codegen` script uses.
-#
-# The tree sits beside `primitive/config.json`, which is NOT always this
+# Synced TOMLs sit beside `primitive/config.json`, which is NOT always this
 # directory: one Primitive app can have several clients (this one and a web
-# client in a sibling directory), and then the project config and its
-# export live at the repo root. So walk up for it, the way git finds `.git` and
-# the way the CLI resolves the project — a standalone app's nearest ancestor is
-# itself, which is the old behavior exactly.
+# client in a sibling directory), and then the project config and its export
+# live at the repo root. So walk up for it, the way git finds `.git` and the
+# way the CLI resolves the project — a standalone app's nearest ancestor is
+# itself.
 #
 # No config anywhere is a scaffold that is not a project yet: nothing to
 # generate, and nothing to fail about.
@@ -279,7 +263,7 @@ while :; do
 done
 
 # WHICH environment (#3078). The guard has to ask the same question the CLI
-# will: a class synced only under `alpha` while `dev` is selected must be
+# will: functions synced only under `alpha` while `dev` is selected must be
 # SKIPPED, not generated from the wrong backend and not failed on. Resolving it
 # here rather than globbing every environment is what keeps an ordinary build —
 # including Xcode's Run button, which now runs this script — from failing on an
@@ -292,7 +276,7 @@ if [ -n "$PROJECT_ROOT" ]; then
     RESOLVED_ENV="$(printf '%s\n' "$SELECTION" | sed -n '1p')"
 fi
 
-# True when the SELECTED environment has this artifact class synced.
+# The SELECTED environment's synced TOMLs of one kind.
 #
 # The fallback is deliberate: when no single environment resolves at all —
 # several defined, none selected — the guard widens back to every environment,
@@ -315,22 +299,14 @@ has_synced() {
     [ -n "$(synced_tomls "$1")" ]
 }
 
-if has_synced workflows; then
-    resolve_cli "workflows"
-
-    echo "Running primitive workflows codegen..." >&2
-    mkdir -p "$WORKFLOW_GEN_DIR"
-    run_cli workflows codegen --lang swift -o "$WORKFLOW_GEN_DIR"
-fi
-
 # ────────────────────────────────────────────────────────────────────────────
 # Server-function invokers
 # ────────────────────────────────────────────────────────────────────────────
 # `<Key>Input` / `<Key>Output` from each function's declared schemas plus a
-# typed `<Key>Function` invoker (#3344) — committed like the two classes above,
-# and rewritten here on every build path for the same reason.
+# typed `<Key>Function` invoker (#3344) — committed like the models, and
+# rewritten here on every build path for the same reason.
 #
-# Guarded exactly like the workflow half: with no synced
+# Only when this app has synced functions: with no
 # `primitive/<env>/functions/*.toml` there is nothing to generate, and a build
 # that has nothing to generate must not fail.
 if has_synced functions; then
@@ -389,18 +365,16 @@ codegen_inputs() {
     [ -f "$SCHEMA_APP_SOURCES/bao-codegen.json" ] &&
         srcroot_relative "$SCHEMA_APP_SOURCES/bao-codegen.json"
     [ -n "$SCHEMA_TOML" ] && srcroot_relative "$SCHEMA_TOML"
-    for kind in workflows functions; do
-        while IFS= read -r toml; do
-            [ -n "$toml" ] && srcroot_relative "$toml"
-        done <<EOF
-$(synced_tomls "$kind")
+    while IFS= read -r toml; do
+        [ -n "$toml" ] && srcroot_relative "$toml"
+    done <<EOF
+$(synced_tomls functions)
 EOF
-    done
     return 0
 }
 
 codegen_outputs() {
-    for dir in "$MODELS_GEN_DIR" "$WORKFLOW_GEN_DIR" "$FUNCTIONS_GEN_DIR"; do
+    for dir in "$MODELS_GEN_DIR" "$FUNCTIONS_GEN_DIR"; do
         for generated in "$dir"/*.swift; do
             [ -f "$generated" ] && echo "\$(SRCROOT)/$generated"
         done
@@ -416,12 +390,12 @@ codegen_outputs | sort -u > "$OUTPUTS_LIST"
 # Verification, then the stamp
 # ────────────────────────────────────────────────────────────────────────────
 # Everything has been emitted and every list refreshed by now, so a failure here
-# still leaves the reviewable diff behind — and covers all three directories in
-# one pass, by full group-resolved path (#3078).
+# still leaves the reviewable diff behind — and covers both directories in one
+# pass, by full group-resolved path (#3078).
 if [ "$VERIFY_PROJECT" = true ]; then
     bash scripts/verify-generated-project.sh \
-        --label "$SCHEMA_TOML" \
-        "$MODELS_GEN_DIR" "$WORKFLOW_GEN_DIR" "$FUNCTIONS_GEN_DIR"
+        --label "${SCHEMA_TOML:-the generated code}" \
+        "$MODELS_GEN_DIR" "$FUNCTIONS_GEN_DIR"
 fi
 
 # The phase declares this stamp as its output. Written LAST, and by this script

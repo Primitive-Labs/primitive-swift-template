@@ -19,8 +19,8 @@
 # archived bundle carries only that environment's values (#2873).
 #
 # This is not a special case (#3078): it regenerates and builds like every
-# other path. `scripts/regenerate-project.sh` runs the full codegen — models,
-# workflow factories, function invokers — before xcodegen scans for sources, and a
+# other path. `scripts/regenerate-project.sh` runs the full codegen — models and
+# function invokers — before xcodegen scans for sources, and a
 # failing codegen stops the archive. There is no release-time drift check: a
 # schema change shows up as a working-tree diff on the developer's ordinary
 # build, which is where it gets reviewed and committed.

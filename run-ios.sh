@@ -71,17 +71,12 @@ done
 # ────────────────────────────────────────────────────────────────────────────
 # Codegen (Xcode build path)
 # ────────────────────────────────────────────────────────────────────────────
-# `swift build` runs `JsBaoCodegenPlugin` automatically for the models. The
-# Xcode app target compiles its own source list from `.pbxproj` though, so the
-# SPM plugin never fires on the iOS path — and nothing ever regenerated the
-# workflow factories on any path. The shared entry point runs both, writing
-# into checked-out `Generated/` directories that xcodegen picks up below.
+# The shared entry point regenerates the models and the function invokers
+# into the committed `Generated/` directories that xcodegen picks up below.
 #
-# The app target also runs the model half as a pre-build phase (#2886), so a
-# build started from Xcode or a bare `xcodebuild` is just as fresh. What this
-# call is really for is the COMMITTED halves — the workflow factories and the
-# function invokers — which nothing else regenerates; the models are emitted again
-# by the regeneration below, which needs them on disk to list a NEWLY added one
+# The app target also runs it as a pre-build phase (#2886), so a build started
+# from Xcode or a bare `xcodebuild` is just as fresh. It runs here first
+# because the regeneration below needs a NEWLY added model on disk to list it
 # (#3009). That is also why this path leaves `--verify-project` off — the
 # regeneration it would ask for is the next line.
 bash scripts/codegen.sh
@@ -329,7 +324,7 @@ if [ "$VERBOSE" = true ]; then
         --level debug \
         --style compact
 else
-    # Only our app's logs (PrimitiveApp library + NSLog/print output)
+    # Only our app's logs (its com.primitivelabs loggers + NSLog/print output)
     xcrun simctl spawn "$SIM_UDID" log stream \
         --predicate "subsystem BEGINSWITH \"com.primitivelabs\" OR (process == \"$APP_NAME\" AND subsystem == \"\")" \
         --level debug \

@@ -16,13 +16,11 @@
 # Each <dir> is a generated directory, relative to the app root. `--label` names
 # the thing that declares those files, for the error message.
 #
-# WHY FULL PATHS (#3078). This check used to compare BASENAMES. Both CLI
-# generators emit `<key>.generated.swift` — the workflow one into
-# `Workflows/Generated`, the function one into `Functions/Generated` — so an app
-# with a workflow and a function sharing a key has two files with the same name
-# in different directories. With a basename check, one of them missing from
-# a target's Sources phase was satisfied by the other's presence, and Xcode
-# silently omitted a generated source. So resolve identities properly:
+# WHY FULL PATHS (#3078). This check used to compare BASENAMES, so two
+# generated files with the same name in different directories could stand in
+# for each other: one missing from a target's Sources phase was satisfied by the
+# other's presence, and Xcode silently omitted a generated source. So resolve
+# identities properly:
 # PBXBuildFile → its fileRef → the PBXFileReference's own name, prefixed by its
 # group's position in the group tree.
 #

@@ -1,5 +1,4 @@
 import JsBaoClient
-import PrimitiveAppTesting
 
 /// Signs the tests in as the test account, with no email, browser or simulator.
 ///
@@ -13,8 +12,7 @@ import PrimitiveAppTesting
 enum TestSignIn {
     /// A connected client signed in as the test account.
     static func client() async throws -> JsBaoClient {
-        let config = try PrimitiveTestConfig.fromEnvironment()
-        return try await PrimitiveTestAuth.bootstrapClient(config: config)
+        try await TestBootstrap.client(TestEnvironment.fromEnvironment())
     }
 
     /// Disconnects the client and drops its local state.

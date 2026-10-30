@@ -1,2 +1,2 @@
 $(SRCROOT)/.primitive-cli-version
-$(SRCROOT)/Sources/PrimitiveAppTemplate/Models/models.toml
+$(SRCROOT)/Sources/PrimitiveAppTemplate/bao-codegen.json

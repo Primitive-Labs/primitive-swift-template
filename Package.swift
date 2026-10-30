@@ -1,9 +1,4 @@
 // swift-tools-version: 6.1
-//
-// 6.1, not 6.0 (#2966): SwiftPM compiles JsBaoCodegenPlugin against the
-// consuming package's tools version, and the plugin uses
-// `Target.directoryURL`, which PackagePlugin gates on 6.1. A 6.0 manifest
-// here fails the plugin build with "'directoryURL' is unavailable".
 import PackageDescription
 
 let package = Package(
@@ -16,41 +11,28 @@ let package = Package(
         .executable(name: "primitive-app-template", targets: ["PrimitiveAppTemplate"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/Primitive-Labs/swift-primitive-app.git", branch: "alpha"),
-        // Direct `JsBaoClient` dep so the build-tool plugin reference
-        // below resolves. The same package is pulled in transitively
-        // through `PrimitiveApp`, but SPM plugin references must name a
-        // package the consuming manifest depends on directly.
         .package(url: "https://github.com/Primitive-Labs/swift-client.git", branch: "alpha"),
     ],
     targets: [
         .executableTarget(
             name: "PrimitiveAppTemplate",
             dependencies: [
-                .product(name: "PrimitiveApp", package: "swift-primitive-app"),
+                .product(name: "JsBaoClient", package: "swift-client"),
             ],
             path: "Sources/PrimitiveAppTemplate",
-            // The Xcode build path runs `swift-bao-codegen` itself — from
-            // the target's pre-build phase, and from `run-ios.sh` before
-            // it regenerates the project — writing into `Models/Generated/`
-            // so xcodegen can scan it into the .pbxproj. The SPM plugin
-            // emits its own copies into the plugin work dir on `swift build`.
-            // Exclude the manual-output dir from SPM's view so the two
-            // producers don't collide.
-            exclude: ["Models/Generated"],
-            plugins: [
-                .plugin(name: "JsBaoCodegenPlugin", package: "swift-client"),
-            ]
+            // `Models/Generated/` is compiled as committed: `scripts/codegen.sh`
+            // regenerates it on every scripted and Xcode build path, and a bare
+            // `swift build` compiles what is there. `bao-codegen.json` names
+            // the db3 type file codegen reads; it is not a source.
+            exclude: ["Models/Generated/README.md", "bao-codegen.json"]
         ),
         // The app's tests: `./test.sh` runs them on the Mac, signed in as the
         // test account through `Tests/PrimitiveAppTemplateTests/Support/SignIn.swift`.
-        // They call the backend through the client, so the target does not
-        // depend on the app target. SwiftPM only: the Xcode project has no
-        // test bundle.
+        // They reach the app's own types with `@testable import PrimitiveAppTemplate`.
         .testTarget(
             name: "PrimitiveAppTemplateTests",
             dependencies: [
-                .product(name: "PrimitiveAppTesting", package: "swift-primitive-app"),
+                "PrimitiveAppTemplate",
                 .product(name: "JsBaoClient", package: "swift-client"),
             ],
             path: "Tests/PrimitiveAppTemplateTests"
