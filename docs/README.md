@@ -97,6 +97,8 @@ Your data lives in db3s, and a db3 type declares its models. To add one:
    { "input": "../../primitive/dev/db3-types/contacts.toml" }
    ```
 
+   For several types, list them, or their directory, as `inputs`: `{ "inputs": ["../../primitive/dev/db3-types"] }` generates every type in it, with one `GeneratedModels` barrel.
+
 3. Build. `scripts/codegen.sh` emits a Swift type per model into `Models/Generated/` (never edit those files; hand-written companions like `Contact+Extensions.swift` go in `Models/`, outside `Generated/`), and `AppState` registers them at startup.
 4. Subscribe to a db3 of that type and load it with a `BaoDataLoader`:
 

@@ -209,13 +209,23 @@ run_cli() {
 # ────────────────────────────────────────────────────────────────────────────
 # Which schema
 # ────────────────────────────────────────────────────────────────────────────
-# Two lines from the model half: the db3 type file `bao-codegen.json` names
-# (empty when it names none), and the app source directory it resolved it
-# for. Both go into the declared input list below. Asking rather than
-# repeating the resolution keeps ONE reader of `bao-codegen.json`.
+# From the model half: the first input `bao-codegen.json` names (empty when
+# it names none), the app source directory it resolved them for, then every
+# further input — each db3 type file, and each directory `inputs` names. All
+# of them go into the declared input list below. Asking rather than repeating
+# the resolution keeps ONE reader of `bao-codegen.json`.
 SCHEMA_INFO="$(bash scripts/generate-models.sh --print-schema)"
-SCHEMA_TOML="$(printf '%s\n' "$SCHEMA_INFO" | sed -n '1p')"
+SCHEMA_INPUTS="$(printf '%s\n' "$SCHEMA_INFO" | sed -e '2d' -e '/^$/d')"
 SCHEMA_APP_SOURCES="$(printf '%s\n' "$SCHEMA_INFO" | sed -n '2p')"
+
+# What a verification failure names: the one input, or the config listing
+# several.
+SCHEMA_LABEL="the generated code"
+case "$(printf '%s\n' "$SCHEMA_INPUTS" | sed '/^$/d' | wc -l | tr -d ' ')" in
+    0) ;;
+    1) SCHEMA_LABEL="$SCHEMA_INPUTS" ;;
+    *) SCHEMA_LABEL="$SCHEMA_APP_SOURCES/bao-codegen.json" ;;
+esac
 
 # ────────────────────────────────────────────────────────────────────────────
 # Models
@@ -364,7 +374,11 @@ codegen_inputs() {
     [ -f .primitive-cli-version ] && srcroot_relative .primitive-cli-version
     [ -f "$SCHEMA_APP_SOURCES/bao-codegen.json" ] &&
         srcroot_relative "$SCHEMA_APP_SOURCES/bao-codegen.json"
-    [ -n "$SCHEMA_TOML" ] && srcroot_relative "$SCHEMA_TOML"
+    while IFS= read -r input; do
+        [ -n "$input" ] && srcroot_relative "$input"
+    done <<EOF
+$SCHEMA_INPUTS
+EOF
     while IFS= read -r toml; do
         [ -n "$toml" ] && srcroot_relative "$toml"
     done <<EOF
@@ -382,9 +396,10 @@ codegen_outputs() {
     return 0
 }
 
-codegen_inputs | sort -u > "$INPUTS_LIST"
+# Code-point order, whatever the shell's locale: Xcode and the #3078 test read these lists.
+codegen_inputs | LC_ALL=C sort -u > "$INPUTS_LIST"
 
-codegen_outputs | sort -u > "$OUTPUTS_LIST"
+codegen_outputs | LC_ALL=C sort -u > "$OUTPUTS_LIST"
 
 # ────────────────────────────────────────────────────────────────────────────
 # Verification, then the stamp
@@ -394,7 +409,7 @@ codegen_outputs | sort -u > "$OUTPUTS_LIST"
 # pass, by full group-resolved path (#3078).
 if [ "$VERIFY_PROJECT" = true ]; then
     bash scripts/verify-generated-project.sh \
-        --label "${SCHEMA_TOML:-the generated code}" \
+        --label "$SCHEMA_LABEL" \
         "$MODELS_GEN_DIR" "$FUNCTIONS_GEN_DIR"
 fi
 
