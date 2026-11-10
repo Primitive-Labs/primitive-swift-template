@@ -275,8 +275,12 @@ if [ "$SIM_STATE" != "Booted" ]; then
     # `simctl launch` against one still coming up fails with "Unable to lookup
     # in current state: Booting".
     xcrun simctl bootstatus "$SIM_UDID"
-    # Open Simulator.app so you can see it
-    open -a Simulator
+    # Open the simulator window so you can see it: Simulator.app, or on Xcode
+    # 27 and later Device Hub, which replaces it. The run needs only the booted
+    # device, so when neither opens it is a note, not a failure.
+    open -a Simulator 2>/dev/null \
+        || open -b com.apple.dt.Devices 2>/dev/null \
+        || echo "Note: could not open the Simulator window; running on the booted device anyway."
 fi
 
 SIM_NAME=$(xcrun simctl list devices -j | SIM_UDID="$SIM_UDID" python3 -c "

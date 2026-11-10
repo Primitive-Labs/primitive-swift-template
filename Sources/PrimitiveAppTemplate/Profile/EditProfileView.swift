@@ -1,7 +1,8 @@
 import PhotosUI
 import SwiftUI
 
-/// Edit the name and avatar. Save uploads the avatar first, then the name,
+/// Edit the name and avatar. A loaded photo shows in the sheet's avatar at
+/// once; Cancel discards it. Save uploads the avatar first, then the name,
 /// as the web template's editor does; a failure keeps the sheet open with the
 /// server's message and leaves the previous avatar in place.
 struct EditProfileView: View {
@@ -27,7 +28,7 @@ struct EditProfileView: View {
                 Section {
                     HStack {
                         Spacer()
-                        AvatarView(name: name.isEmpty ? appState.userName : name, url: appState.userAvatarUrl)
+                        AvatarView(name: name.isEmpty ? appState.userName : name, url: appState.userAvatarUrl, preview: avatar)
                             .frame(width: 80, height: 80)
                         Spacer()
                     }

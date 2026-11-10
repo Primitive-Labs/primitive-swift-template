@@ -67,6 +67,25 @@ final class ProfileTests: XCTestCase {
         XCTAssertNil(AvatarImage.sniff(Data("hello".utf8)))
     }
 
+    func testAPickedPhotoShowsAheadOfTheSavedAvatar() {
+        let saved = "https://example.com/avatar.png"
+        let picked = AvatarView(name: "Ada Lovelace", url: saved, preview: TestImages.pixel)
+        XCTAssertEqual(picked.content, .picked(TestImages.pixel))
+        XCTAssertNotNil(picked.content.pickedImage)
+        XCTAssertEqual(AvatarView(name: "Ada Lovelace", url: saved).content, .saved(URL(string: saved)!))
+        XCTAssertEqual(AvatarView(name: "Ada Lovelace", url: nil).content, .initials)
+    }
+
+    func testAPickedPhotoPreviewsUpright() throws {
+        // A 4×2 JPEG tagged orientation 6 (rotate 90° clockwise) displays 2×4.
+        let rotated = try TestImages.jpeg(width: 4, height: 2, orientation: 6)
+        guard case .success(let picked) = AvatarImage.prepare(rotated) else { return XCTFail("the test JPEG did not prepare") }
+        XCTAssertEqual(picked.data, rotated, "a small JPEG uploads as it is, orientation tag included")
+        let image = try XCTUnwrap(AvatarView(name: "Ada Lovelace", url: nil, preview: picked).content.pickedImage)
+        XCTAssertEqual(image.width, 2)
+        XCTAssertEqual(image.height, 4)
+    }
+
     func testALargePhotoIsScaledDownToFitTheUploadLimit() throws {
         let big = try TestImages.jpeg(width: 1600, height: 1200)
         XCTAssertGreaterThan(big.count, AvatarImage.maxUploadBytes)
@@ -79,8 +98,9 @@ final class ProfileTests: XCTestCase {
 }
 
 extension TestImages {
-    /// A noisy JPEG, so it does not compress below the upload limit.
-    static func jpeg(width: Int, height: Int) throws -> Data {
+    /// A noisy JPEG, so it does not compress below the upload limit, tagged
+    /// with an EXIF `orientation` when one is given.
+    static func jpeg(width: Int, height: Int, orientation: Int? = nil) throws -> Data {
         var pixels = [UInt8](repeating: 0, count: width * height * 4)
         var seed: UInt32 = 42
         for i in 0..<pixels.count {
@@ -94,7 +114,9 @@ extension TestImages {
         let image = try XCTUnwrap(context.makeImage())
         let out = NSMutableData()
         let destination = try XCTUnwrap(CGImageDestinationCreateWithData(out, UTType.jpeg.identifier as CFString, 1, nil))
-        CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 1.0] as CFDictionary)
+        var properties: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: 1.0]
+        if let orientation { properties[kCGImagePropertyOrientation] = orientation }
+        CGImageDestinationAddImage(destination, image, properties as CFDictionary)
         XCTAssertTrue(CGImageDestinationFinalize(destination))
         return out as Data
     }

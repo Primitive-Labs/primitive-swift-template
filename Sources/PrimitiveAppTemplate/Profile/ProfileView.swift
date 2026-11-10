@@ -1,3 +1,4 @@
+import ImageIO
 import SwiftUI
 import JsBaoClient
 
@@ -102,21 +103,60 @@ struct ProfileView: View {
     }
 }
 
-/// A round avatar: the image at `url`, else the name's initials.
+/// A round avatar: a picked `preview` not yet saved, else the image at `url`,
+/// else the name's initials.
 struct AvatarView: View {
     let name: String
     let url: String?
+    var preview: AvatarImage? = nil
+
+    /// What the avatar draws.
+    enum Content: Equatable {
+        case picked(AvatarImage)
+        case saved(URL)
+        case initials
+
+        /// The picked image, decoded upright (its EXIF orientation applied) and
+        /// scaled to avatar size; nil for any other content.
+        var pickedImage: CGImage? {
+            guard case .picked(let image) = self,
+                  let source = CGImageSourceCreateWithData(image.data as CFData, nil) else { return nil }
+            let options: [CFString: Any] = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: 512,
+            ]
+            return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+        }
+    }
+
+    var content: Content {
+        if let preview { return .picked(preview) }
+        if let url, let parsed = URL(string: url) { return .saved(parsed) }
+        return .initials
+    }
 
     var body: some View {
-        if let url, let parsed = URL(string: url) {
-            AsyncImage(url: parsed) { image in
+        switch content {
+        case .picked:
+            if let image = content.pickedImage {
+                Image(decorative: image, scale: 1)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .clipShape(Circle())
+                    .accessibilityIdentifier("primitive.profile.avatarImage")
+            } else {
+                initials
+            }
+        case .saved(let url):
+            AsyncImage(url: url) { image in
                 image.resizable().aspectRatio(contentMode: .fill)
             } placeholder: {
                 initials
             }
             .clipShape(Circle())
             .accessibilityIdentifier("primitive.profile.avatarImage")
-        } else {
+        case .initials:
             initials
         }
     }

@@ -60,6 +60,20 @@ struct LoginView: View {
             + "We'll send you an email when your access is approved."
     }
 
+    /// What the code field holds after an edit: the ASCII digits typed or
+    /// pasted, at most `AuthModel.otpLength` of them. Pasting more keeps the
+    /// first six; spaces, dashes and other characters are dropped.
+    static func otpFieldText(_ input: String) -> String {
+        String(input.filter { $0.isASCII && $0.isNumber }.prefix(AuthModel.otpLength))
+    }
+
+    /// Whether Verify is enabled: the code is exactly `AuthModel.otpLength`
+    /// ASCII digits.
+    static func canVerify(otpCode: String) -> Bool {
+        otpCode.count == AuthModel.otpLength
+            && otpCode.allSatisfy { $0.isASCII && $0.isNumber }
+    }
+
     /// Which buttons to render: the server's auth config, loaded by
     /// `AuthModel.attach`. Email only until it resolves.
     private var providers: AuthModel.AuthProviders {
@@ -296,12 +310,18 @@ struct LoginView: View {
                 #if os(iOS)
                 .keyboardType(.numberPad)
                 #endif
+                // A number pad still accepts a paste, and a Mac keyboard
+                // types anything: keep the field to the code's digits.
+                .onChange(of: otpCode) { _, newValue in
+                    let kept = Self.otpFieldText(newValue)
+                    if kept != newValue { otpCode = kept }
+                }
 
             Button("Verify") {
                 Task { await auth.verifyOtp(email: email, code: otpCode) }
             }
             .buttonStyle(.borderedProminent)
-            .disabled(otpCode.count < otpLength)
+            .disabled(!Self.canVerify(otpCode: otpCode))
             .accessibilityIdentifier("primitive.login.otpVerify")
 
             Button("Back to login") {

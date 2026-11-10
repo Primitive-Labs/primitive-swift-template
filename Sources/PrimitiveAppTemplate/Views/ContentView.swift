@@ -1,5 +1,6 @@
 import SwiftUI
 import JsBaoClient
+import JsBaoClientUI
 
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
@@ -116,6 +117,17 @@ struct AppTabView: View {
 //
 // The databases guide has the full pattern:
 // `primitive guides get databases --language swift`.
+//
+// A db3's blobs show as images with `BlobImage` (from `JsBaoClientUI`,
+// imported above), which loads with the signed-in user's auth:
+//
+//   if let client = appState.client {
+//       BlobImage(client.db3.blobs(contactsId), blobId: photoId) { image in
+//           image.resizable().scaledToFill()
+//       } placeholder: {
+//           ProgressView()
+//       }
+//   }
 
 struct HomeView: View {
     @EnvironmentObject var appState: AppState

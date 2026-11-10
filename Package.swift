@@ -18,6 +18,8 @@ let package = Package(
             name: "PrimitiveAppTemplate",
             dependencies: [
                 .product(name: "JsBaoClient", package: "swift-client"),
+                // The client's SwiftUI views: `BlobImage` shows a db3 blob.
+                .product(name: "JsBaoClientUI", package: "swift-client"),
             ],
             path: "Sources/PrimitiveAppTemplate",
             // `Models/Generated/` is compiled as committed: `scripts/codegen.sh`
@@ -34,6 +36,7 @@ let package = Package(
             dependencies: [
                 "PrimitiveAppTemplate",
                 .product(name: "JsBaoClient", package: "swift-client"),
+                .product(name: "JsBaoClientUI", package: "swift-client"),
             ],
             path: "Tests/PrimitiveAppTemplateTests"
         ),

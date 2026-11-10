@@ -37,9 +37,11 @@
 		A992A475798C9E1AD8F93786 /* PrimitiveAppTemplateApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D19C365250FD7348EB25D348 /* PrimitiveAppTemplateApp.swift */; };
 		AA363B22A6F2BD4274125D0C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 145FA2287630E2F15774810F /* Assets.xcassets */; };
 		AA7B26B2F6BDD881262881F8 /* ReadyGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B750F432A9C0433A9A47AF7 /* ReadyGate.swift */; };
+		AE0AA3A3117050DF5D4784E7 /* JsBaoClientUI in Frameworks */ = {isa = PBXBuildFile; productRef = 96DC34D9EECE6ADAF12FCC59 /* JsBaoClientUI */; };
 		B697AB3B29D058D2A537445F /* AppState+Links.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBF6960B8EADAA94558B2AEA /* AppState+Links.swift */; };
 		B911E91085F4CCA816449001 /* primitive.json in Resources */ = {isa = PBXBuildFile; fileRef = 22D4EDF4ABD3438AF6ED5C83 /* primitive.json */; };
 		BD39685EC6EE7F312B967D0A /* AuthGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 860CFCA19510EA0B2F96D1D5 /* AuthGate.swift */; };
+		C14491827AF4DD4302AF6321 /* JsBaoClientUI in Frameworks */ = {isa = PBXBuildFile; productRef = D43A827B9229E6621C15954D /* JsBaoClientUI */; };
 		C63C385E906930E81BC9993D /* primitive.json in Resources */ = {isa = PBXBuildFile; fileRef = 22D4EDF4ABD3438AF6ED5C83 /* primitive.json */; };
 		C7E50EEF4D1DDD6AE3A6BFB0 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EABD866E9AC51742D968074F /* LoginView.swift */; };
 		DB584A6C891EA9C928A9DFC5 /* PrimitiveAppTemplateApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D19C365250FD7348EB25D348 /* PrimitiveAppTemplateApp.swift */; };
@@ -89,6 +91,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E4D09BDA1A56BEC49AED16B8 /* JsBaoClient in Frameworks */,
+				AE0AA3A3117050DF5D4784E7 /* JsBaoClientUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -97,6 +100,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E799B61943DCC3092736DD2B /* JsBaoClient in Frameworks */,
+				C14491827AF4DD4302AF6321 /* JsBaoClientUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -251,6 +255,7 @@
 			name = PrimitiveAppTemplate_macOS;
 			packageProductDependencies = (
 				E04E112D3C75606E8BF5EAF1 /* JsBaoClient */,
+				96DC34D9EECE6ADAF12FCC59 /* JsBaoClientUI */,
 			);
 			productName = PrimitiveAppTemplate_macOS;
 			productReference = ADCCB791BA52ED925B364656 /* PrimitiveAppTemplate.app */;
@@ -273,6 +278,7 @@
 			name = PrimitiveAppTemplate_iOS;
 			packageProductDependencies = (
 				E0D50AB18D6C7C6AA4C58FF5 /* JsBaoClient */,
+				D43A827B9229E6621C15954D /* JsBaoClientUI */,
 			);
 			productName = PrimitiveAppTemplate_iOS;
 			productReference = 9814C93D1BCC3782D1267EF2 /* PrimitiveAppTemplate.app */;
@@ -840,6 +846,16 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		96DC34D9EECE6ADAF12FCC59 /* JsBaoClientUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2735D2E2CD2D0879D0491980 /* XCRemoteSwiftPackageReference "swift-client" */;
+			productName = JsBaoClientUI;
+		};
+		D43A827B9229E6621C15954D /* JsBaoClientUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2735D2E2CD2D0879D0491980 /* XCRemoteSwiftPackageReference "swift-client" */;
+			productName = JsBaoClientUI;
+		};
 		E04E112D3C75606E8BF5EAF1 /* JsBaoClient */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 2735D2E2CD2D0879D0491980 /* XCRemoteSwiftPackageReference "swift-client" */;
