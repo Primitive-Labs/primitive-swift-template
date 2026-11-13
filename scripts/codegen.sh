@@ -316,10 +316,12 @@ has_synced() {
 # typed `<Key>Function` invoker (#3344) — committed like the models, and
 # rewritten here on every build path for the same reason.
 #
-# Only when this app has synced functions: with no
-# `primitive/<env>/functions/*.toml` there is nothing to generate, and a build
-# that has nothing to generate must not fail.
-if has_synced functions; then
+# Only when this app has synced functions or `schemas/`: with neither there is
+# nothing to generate, and a build that has nothing to generate must not fail.
+# A synced `schemas/` file alone is enough (#5896): the shared types file this
+# step writes, `Primitive.generated.swift`, declares each shared enum, and a
+# model field that refs one is typed by it.
+if has_synced functions || has_synced schemas; then
     resolve_cli "server functions"
 
     echo "Running primitive functions codegen..." >&2
@@ -383,6 +385,7 @@ EOF
         [ -n "$toml" ] && srcroot_relative "$toml"
     done <<EOF
 $(synced_tomls functions)
+$(synced_tomls schemas)
 EOF
     return 0
 }
